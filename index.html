@@ -1,1 +1,648 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Beat Sheet Pro</title>
+  <link rel="manifest" href="./manifest.webmanifest?v=20260210_1">
 
+  <style>
+    :root{
+      --bg:#e9e9e9;
+      --card:#ffffff;
+      --stroke:rgba(0,0,0,.12);
+      --shadow:0 10px 24px rgba(0,0,0,.10);
+      --muted:#6b7280;
+
+      --green:#c9f6d6;
+      --snare:#bcdcff;
+      --hl:#ffe66a;
+
+      --red:#ff2b2b;
+      --yellow:#ffd54a;
+      --okgreen:#35d07f;
+    }
+
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      background:var(--bg);
+      color:#111;
+      padding-bottom: 110px; /* room for rhyme dock */
+    }
+
+    header{
+      position:sticky;
+      top:0;
+      z-index:20;
+      background:var(--bg);
+      border-bottom:1px solid rgba(0,0,0,.06);
+      padding:8px 10px;
+      max-height:25vh;
+      overflow:auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    /* ✅ Only on FULL tab: shorter header + hide recordings card */
+    body.fullMode header{ max-height:14vh; }
+    body.fullMode .miniCard{ display:none; }
+
+    /* ✅ Header collapse mode: show ONLY metronome + record */
+    body.headerCollapsed header{
+      max-height:none;
+      overflow:hidden;
+      padding:8px 10px 10px;
+    }
+    body.headerCollapsed .titleRow,
+    body.headerCollapsed .topRow,
+    body.headerCollapsed .tabs,
+    body.headerCollapsed .miniCard{
+      display:none !important;
+    }
+    body.headerCollapsed .stickyTools{
+      margin-top:0;
+    }
+    body.headerCollapsed .headerToggleRow{
+      display:flex;
+    }
+
+    .titleRow{
+      display:flex;
+      align-items:flex-end;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:6px;
+    }
+    .title{
+      font-size:22px;
+      font-weight:1000;
+      letter-spacing:-.3px;
+      line-height:1;
+      margin:0;
+    }
+    .small{
+      font-size:12px;
+      color:var(--muted);
+      font-weight:900;
+      white-space:nowrap;
+    }
+
+    .topRow{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
+      margin-bottom:8px;
+    }
+
+    button, .pill, input, select{
+      border:1px solid var(--stroke);
+      background:#fff;
+      border-radius:14px;
+      padding:9px 11px;
+      font-size:14px;
+      box-shadow:0 6px 14px rgba(0,0,0,.05);
+    }
+    button{ font-weight:1000; cursor:pointer; user-select:none; }
+    .pill{ display:flex; align-items:center; gap:8px; padding:9px 11px; }
+    .pill label{
+      font-size:10px;
+      color:var(--muted);
+      font-weight:1000;
+      text-transform:uppercase;
+      letter-spacing:.6px;
+      line-height:1;
+    }
+    input[type="number"]{ width:88px; font-weight:1000; }
+
+    .tabs{
+      display:flex;
+      gap:8px;
+      flex-wrap:nowrap;
+      overflow:auto;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom:2px;
+      margin-bottom:8px;
+    }
+    .tab{
+      flex:0 0 auto;
+      padding:8px 11px;
+      border-radius:16px;
+      border:1px solid var(--stroke);
+      background:#fff;
+      font-weight:1000;
+      box-shadow:0 6px 14px rgba(0,0,0,.05);
+      white-space:nowrap;
+    }
+    .tab.active{
+      background:#111;
+      color:#fff;
+      border-color:#111;
+    }
+
+    .stickyTools{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:10px;
+      align-items:stretch;
+    }
+
+    .metroBtn{
+      display:flex; align-items:center; justify-content:center;
+      font-weight:1000; border-radius:16px;
+      border:2px solid rgba(0,0,0,.12);
+      background:#fff; color:#111;
+      padding:10px 14px; min-height:64px;
+    }
+    .metroBtn.on{ background:#111; color:#fff; border-color:#111; }
+
+    .recordBtn{
+      display:flex; align-items:center; justify-content:center;
+      font-weight:1000; border-radius:16px;
+      border:2px solid var(--red);
+      background:var(--red); color:#fff;
+      padding:10px 14px; min-height:64px;
+    }
+    .recordBtn.recOn{ background:#111; border-color:#111; }
+
+    .miniCard{
+      background:#fff;
+      border:1px solid var(--stroke);
+      border-radius:16px;
+      padding:10px 12px;
+      box-shadow:0 6px 14px rgba(0,0,0,.05);
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      min-width:0;
+      margin-top:10px;
+    }
+
+    .miniTop{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
+    .miniTitle{
+      font-size:11px; font-weight:1000; color:var(--muted);
+      text-transform:uppercase; letter-spacing:.6px;
+    }
+    .miniValue{
+      font-size:13px; font-weight:1000;
+      max-width:65%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    }
+
+    .wideInput{
+      width:100%;
+      padding:10px 12px;
+      font-size:15px;
+      font-weight:1000;
+      border-radius:14px;
+    }
+
+    main{ padding:10px 10px 26px; }
+
+    .panel{
+      background:var(--card);
+      border:1px solid var(--stroke);
+      border-radius:18px;
+      padding:10px;
+      box-shadow:var(--shadow);
+      margin-bottom:10px;
+    }
+
+    #bars{ display:flex; flex-direction:column; gap:10px; }
+
+    .bar{
+      background:var(--card);
+      border:1px solid var(--stroke);
+      border-radius:18px;
+      padding:10px;
+      box-shadow:var(--shadow);
+    }
+
+    .barTop{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      margin-bottom:8px;
+      gap:10px;
+    }
+    .barLeft{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      min-width:0;
+    }
+    .barNum{
+      width:34px;
+      height:34px;
+      border-radius:12px;
+      border:1px solid rgba(0,0,0,.14);
+      background:#fff;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:1000;
+      flex:0 0 auto;
+    }
+    .syllPill{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:8px 12px;
+      border-radius:999px;
+      border:2px solid rgba(0,0,0,.12);
+      background:#fff;
+      font-weight:1000;
+      min-width:160px;
+      flex:0 0 auto;
+    }
+    .syllPill .lbl{
+      font-size:10px;
+      color:rgba(0,0,0,.55);
+      text-transform:uppercase;
+      letter-spacing:.7px;
+    }
+    .syllPill .val{ font-size:16px; }
+
+    .syllPill.green{
+      border-color: rgba(53, 208, 127, .9);
+      box-shadow: 0 0 0 4px rgba(53, 208, 127, .20);
+    }
+    .syllPill.yellow{
+      border-color: rgba(255, 213, 74, .95);
+      box-shadow: 0 0 0 4px rgba(255, 213, 74, .22);
+    }
+    .syllPill.red{
+      border-color: rgba(255, 43, 43, .9);
+      box-shadow: 0 0 0 4px rgba(255, 43, 43, .18);
+    }
+
+    textarea{
+      width:100%;
+      min-height:96px;
+      resize:vertical;
+      padding:12px;
+      border-radius:16px;
+      border:1px solid rgba(0,0,0,.18);
+      background:var(--green);
+      font-size:18px;
+      line-height:1.25;
+      font-weight:900;
+      outline:none;
+    }
+
+    .beats{
+      margin-top:10px;
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:10px;
+    }
+    .beat{
+      min-height:70px;
+      border-radius:16px;
+      border:1px solid rgba(0,0,0,.14);
+      background:#fff;
+      padding:10px;
+      font-weight:1000;
+      overflow-wrap:anywhere;
+    }
+    .beat.snare{ background:var(--snare); }
+    .beat.flash{
+      background:var(--hl) !important;
+      box-shadow:0 0 0 4px rgba(255,230,106,.45);
+    }
+
+    .fullBox{
+      background:#fff;
+      border:1px solid var(--stroke);
+      border-radius:18px;
+      padding:12px;
+      box-shadow:var(--shadow);
+      font-weight:900;
+      line-height:1.35;
+      font-size:15px;
+    }
+    .fullSub{
+      color:var(--muted);
+      font-weight:1000;
+      font-size:12px;
+      margin-bottom:8px;
+    }
+
+    .fullEditor{
+      width:100%;
+      height:70vh;
+      min-height:420px;
+      resize:vertical;
+      padding:12px;
+      border-radius:16px;
+      border:1px solid rgba(0,0,0,.18);
+      background:#fff;
+      font-size:16px;
+      line-height:1.35;
+      font-weight:900;
+      outline:none;
+      white-space:pre-wrap;
+    }
+    body.fullMode .fullEditor{
+      height:76vh;
+      min-height:520px;
+    }
+
+    .toast{
+      position:fixed;
+      left:50%;
+      bottom:18px;
+      transform:translateX(-50%);
+      background:#111;
+      color:#fff;
+      padding:10px 14px;
+      border-radius:14px;
+      opacity:0;
+      pointer-events:none;
+      transition:opacity .2s ease;
+      font-weight:1000;
+      z-index:50;
+    }
+    .toast.show{ opacity:1; }
+
+    .audioItem{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      justify-content:space-between;
+      flex-wrap:wrap;
+      margin-top:8px;
+    }
+    .audioLabel{
+      font-weight:1000;
+      flex:1;
+      min-width:150px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+
+    /* ✅ NEW: circular icon buttons */
+    .iconRow{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      flex:0 0 auto;
+    }
+    .iconBtn{
+      width:38px;
+      height:38px;
+      padding:0;
+      border-radius:999px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:16px;
+      font-weight:1000;
+      line-height:1;
+      box-shadow:0 6px 14px rgba(0,0,0,.08);
+    }
+    .iconBtn.play{
+      border-color: rgba(53, 208, 127, .65);
+      background: rgba(53, 208, 127, .18);
+      color:#0f5132;
+    }
+    .iconBtn.stop{
+      border-color: rgba(0,0,0,.35);
+      background: rgba(0,0,0,.08);
+      color:#111;
+    }
+    .iconBtn.delete{
+      border-color: rgba(255, 43, 43, .55);
+      background: rgba(255, 43, 43, .12);
+      color:#7f1d1d;
+    }
+
+    /* ✅ header collapse toggle row */
+    .headerToggleRow{
+      display:none;
+      align-items:center;
+      justify-content:flex-end;
+      margin-bottom:8px;
+    }
+    .headerToggleBtn{
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:1000;
+      box-shadow:0 4px 10px rgba(0,0,0,.04);
+      white-space:nowrap;
+    }
+
+    .rhymeDock{
+      position:fixed;
+      left:10px;
+      right:10px;
+      bottom:10px;
+      z-index:100;
+      background:#fff;
+      border:1px solid rgba(0,0,0,.12);
+      border-radius:18px;
+      box-shadow:0 16px 40px rgba(0,0,0,.18);
+      padding:10px 12px;
+      transform: translateZ(0);
+    }
+
+    /* ✅ "hidden" state for dock -> becomes a circle bottom-right */
+    .rhymeDock.dockHidden{
+      left:auto !important;
+      right:10px !important;
+      width:58px;
+      height:58px;
+      padding:0;
+      border-radius:999px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .rhymeDock.dockHidden .dockTitle,
+    .rhymeDock.dockHidden .dockBase{
+      display:none !important;
+    }
+    .rhymeDock.dockHidden .rhymeWrap{
+      display:none !important;
+    }
+    .rhymeDock.dockHidden .dockTop{
+      margin:0 !important;
+      width:100%;
+      justify-content:center;
+      align-items:center;
+    }
+    .rhymeDock.dockHidden .dockHideBtn{
+      width:46px;
+      height:46px;
+      padding:0;
+      border-radius:999px;
+      font-size:18px;
+      line-height:1;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      box-shadow:0 10px 24px rgba(0,0,0,.12);
+      white-space:nowrap;
+    }
+
+    .dockTop{
+      display:flex;
+      align-items:baseline;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom:8px;
+    }
+    .dockTitle{
+      font-size:11px;
+      font-weight:1000;
+      color:var(--muted);
+      text-transform:uppercase;
+      letter-spacing:.6px;
+    }
+    .dockBase{
+      font-size:14px;
+      font-weight:1000;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      max-width:60%;
+    }
+    .dockHideBtn{
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:1000;
+      box-shadow:0 4px 10px rgba(0,0,0,.04);
+      white-space:nowrap;
+    }
+
+    .rhymeWrap{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      overflow:auto;
+      -webkit-overflow-scrolling: touch;
+      white-space:nowrap;
+      padding-bottom:2px;
+    }
+    .rhymeChip{
+      flex:0 0 auto;
+      border:1px solid rgba(0,0,0,.12);
+      background:#fff;
+      border-radius:999px;
+      padding:7px 10px;
+      font-weight:1000;
+      font-size:13px;
+      cursor:pointer;
+      box-shadow:0 4px 10px rgba(0,0,0,.04);
+    }
+
+    @media (max-width: 420px){
+      .recordBtn, .metroBtn{ min-height:52px; }
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <!-- ✅ NEW: shows when collapsed (and also available when expanded) -->
+    <div class="headerToggleRow">
+      <button id="headerToggle" class="headerToggleBtn" type="button">Show</button>
+    </div>
+
+    <div class="titleRow">
+      <h1 class="title">Beat Sheet Pro</h1>
+      <div class="small" id="statusText"></div>
+    </div>
+
+    <div class="topRow">
+      <button id="exportBtn">Export</button>
+      <button id="saveBtn">Save</button>
+
+      <div class="pill">
+        <label>BPM</label>
+        <input id="bpm" type="number" min="40" max="240" value="95" />
+      </div>
+
+      <div class="pill">
+        <label>Highlight</label>
+        <select id="highlightMode" style="border:0;outline:none;background:transparent;font-weight:1000;">
+          <option value="focused">Focused</option>
+          <option value="all">All</option>
+        </select>
+      </div>
+
+      <div class="pill">
+        <label>Auto-split</label>
+        <select id="autoSplitMode" style="border:0;outline:none;background:transparent;font-weight:1000;">
+          <option value="syllables">Syllables</option>
+          <option value="words">Words</option>
+          <option value="none">Off</option>
+        </select>
+      </div>
+
+      <div class="pill">
+        <label>Projects</label>
+        <select id="projectSort" style="border:0;outline:none;background:transparent;font-weight:1000;">
+          <option value="recent">Most recent</option>
+          <option value="az">A → Z</option>
+        </select>
+      </div>
+
+      <!-- ✅ NEW: collapse button (small) -->
+      <button id="headerToggle2" class="headerToggleBtn" type="button">Hide</button>
+    </div>
+
+    <div class="tabs" id="sectionTabs"></div>
+
+    <div class="stickyTools">
+      <button id="metroBtn" class="metroBtn">Metronome</button>
+      <button id="recordBtn" class="recordBtn">●</button>
+    </div>
+
+    <div class="miniCard">
+      <div class="miniTop">
+        <div class="miniTitle">Recording</div>
+        <div class="miniValue" id="recHint">voice + metronome</div>
+      </div>
+
+      <input id="recordName" class="wideInput" type="text" placeholder="Recording name…" />
+      <div id="recordingsList"></div>
+    </div>
+  </header>
+
+  <main>
+    <div class="panel">
+      <input id="projectName" class="wideInput" type="text" placeholder="Project name…" />
+    </div>
+
+    <div class="panel">
+      <div style="font-weight:1000;margin-bottom:8px;">Projects</div>
+      <div id="projectList"></div>
+      <div style="margin-top:10px;">
+        <button id="newProjectBtn">New project</button>
+      </div>
+    </div>
+
+    <div id="bars"></div>
+  </main>
+
+  <div id="rhymeDock" class="rhymeDock">
+    <div class="dockTop">
+      <div class="dockTitle">Rhymes</div>
+      <div class="dockBase" id="rhymeBase">Tap into a beat…</div>
+      <button id="dockToggle" type="button" class="dockHideBtn">Hide</button>
+    </div>
+    <div class="rhymeWrap" id="rhymeList">
+      <span class="small">Rhymes appear for last word in previous beat box.</span>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">Saved</div>
+
+  <!-- ✅ Cache-buster -->
+  <script src="./app.js?v=20260210_1"></script>
+</body>
+</html>
