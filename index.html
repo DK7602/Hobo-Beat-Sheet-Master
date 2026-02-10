@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Beat Sheet Pro</title>
-  <link rel="manifest" href="./manifest.webmanifest?v=20260210_1">
+  <link rel="manifest" href="./manifest.webmanifest?v=20260210_2">
 
   <style>
     :root{
@@ -115,6 +115,18 @@
       line-height:1;
     }
     input[type="number"]{ width:88px; font-weight:1000; }
+
+    /* ✅ NEW: headshot next to BPM — sized to NOT increase row height */
+    .bpmHeadshot{
+      width:28px;
+      height:28px;
+      border-radius:999px;
+      object-fit:cover;
+      display:block;
+      flex:0 0 auto;
+      border:1px solid rgba(0,0,0,.18);
+      box-shadow:0 4px 10px rgba(0,0,0,.06);
+    }
 
     .tabs{
       display:flex;
@@ -382,7 +394,7 @@
       white-space:nowrap;
     }
 
-    /* ✅ NEW: circular icon buttons */
+    /* ✅ circular icon buttons */
     .iconRow{
       display:flex;
       gap:8px;
@@ -448,7 +460,7 @@
       transform: translateZ(0);
     }
 
-    /* ✅ "hidden" state for dock -> becomes a circle bottom-right */
+    /* ✅ hidden dock -> circle bottom-right */
     .rhymeDock.dockHidden{
       left:auto !important;
       right:10px !important;
@@ -547,7 +559,6 @@
 
 <body>
   <header>
-    <!-- ✅ NEW: shows when collapsed (and also available when expanded) -->
     <div class="headerToggleRow">
       <button id="headerToggle" class="headerToggleBtn" type="button">Show</button>
     </div>
@@ -564,6 +575,8 @@
       <div class="pill">
         <label>BPM</label>
         <input id="bpm" type="number" min="40" max="240" value="95" />
+        <!-- ✅ NEW: headshot next to BPM -->
+        <img class="bpmHeadshot" src="./headshot.png" alt="Headshot">
       </div>
 
       <div class="pill">
@@ -591,7 +604,6 @@
         </select>
       </div>
 
-      <!-- ✅ NEW: collapse button (small) -->
       <button id="headerToggle2" class="headerToggleBtn" type="button">Hide</button>
     </div>
 
@@ -599,7 +611,8 @@
 
     <div class="stickyTools">
       <button id="metroBtn" class="metroBtn">Metronome</button>
-      <button id="recordBtn" class="recordBtn">●</button>
+      <!-- ✅ CHANGED: text instead of dot -->
+      <button id="recordBtn" class="recordBtn">Record</button>
     </div>
 
     <div class="miniCard">
@@ -642,7 +655,6 @@
 
   <div class="toast" id="toast">Saved</div>
 
-  <!-- ✅ Cache-buster -->
-  <script src="./app.js?v=20260210_1"></script>
+  <script src="./app.js?v=20260210_2"></script>
 </body>
 </html>
