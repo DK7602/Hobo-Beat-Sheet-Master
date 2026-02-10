@@ -105,7 +105,17 @@
       box-shadow:0 6px 14px rgba(0,0,0,.05);
     }
     button{ font-weight:1000; cursor:pointer; user-select:none; }
-    .pill{ display:flex; align-items:center; gap:8px; padding:9px 11px; }
+
+    /* ✅ pill is relative so headshot can "float" without changing height */
+    .pill{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:9px 11px;
+      position:relative;
+      overflow:visible;
+    }
+
     .pill label{
       font-size:10px;
       color:var(--muted);
@@ -114,29 +124,33 @@
       letter-spacing:.6px;
       line-height:1;
     }
-    input[type="number"]{ width:88px; font-weight:1000; }
 
-/* ✅ Headshot next to BPM — NO circle, NO cropping */
-.bpmHeadshot{
-  width:44px;
-  height:28px;
-  border-radius:10px;
-  object-fit:contain;
-  object-position:center;
-  display:block;
-  flex:0 0 auto;
-  background:transparent;
-  border:0;
-  box-shadow:none;
-}
+    /* ✅ add right padding so BPM number doesn't collide with the headshot */
+    input[type="number"]{
+      width:88px;
+      font-weight:1000;
+      padding-right:60px;
+    }
 
-  /* sit clean on the gray header background */
-  background: transparent; /* important: no white box behind it */
+    /* ✅ "slightly oversized floating head" (doesn't change pill height) */
+    .bpmHeadshot{
+      position:absolute;
+      right:6px;
+      top:50%;
+      transform:translateY(-50%);
 
-  /* optional: keep a subtle border; remove if you want totally clean */
-  border:1px solid rgba(0,0,0,.14);
-  box-shadow:none;         /* remove shadow so it blends into gray */
-}
+      width:56px;
+      height:56px;
+
+      object-fit:contain;
+      border-radius:14px;
+
+      background:transparent;
+      border:0;
+      box-shadow:none;
+
+      pointer-events:none;
+    }
 
     .tabs{
       display:flex;
@@ -585,7 +599,6 @@
       <div class="pill">
         <label>BPM</label>
         <input id="bpm" type="number" min="40" max="240" value="95" />
-        <!-- ✅ NEW: headshot next to BPM -->
         <img class="bpmHeadshot" src="./headshot.png" alt="Headshot">
       </div>
 
@@ -621,7 +634,6 @@
 
     <div class="stickyTools">
       <button id="metroBtn" class="metroBtn">Metronome</button>
-      <!-- ✅ CHANGED: text instead of dot -->
       <button id="recordBtn" class="recordBtn">Record</button>
     </div>
 
