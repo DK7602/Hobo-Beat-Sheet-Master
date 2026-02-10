@@ -106,14 +106,11 @@
     }
     button{ font-weight:1000; cursor:pointer; user-select:none; }
 
-    /* ✅ pill is relative so headshot can "float" without changing height */
     .pill{
       display:flex;
       align-items:center;
       gap:8px;
       padding:9px 11px;
-      position:relative;
-      overflow:visible;
     }
 
     .pill label{
@@ -125,30 +122,28 @@
       line-height:1;
     }
 
-    /* ✅ add right padding so BPM number doesn't collide with the headshot */
     input[type="number"]{
       width:88px;
       font-weight:1000;
-      padding-right:60px;
+      padding-right:11px; /* ✅ normal again (no head in the pill) */
     }
 
-    /* ✅ "slightly oversized floating head" (doesn't change pill height) */
+    /* ✅ NEW: headshot lives in the gray area, not inside BPM pill */
+    .headshotSlot{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      flex:1 1 auto;        /* takes the leftover gray space */
+      min-width:72px;
+    }
     .bpmHeadshot{
-      position:absolute;
-      right:6px;
-      top:50%;
-      transform:translateY(-50%);
-
-      width:56px;
-      height:56px;
-
+      width:64px;
+      height:64px;
       object-fit:contain;
-      border-radius:14px;
-
+      border-radius:16px;
       background:transparent;
       border:0;
       box-shadow:none;
-
       pointer-events:none;
     }
 
@@ -599,7 +594,11 @@
       <div class="pill">
         <label>BPM</label>
         <input id="bpm" type="number" min="40" max="240" value="95" />
-        <img class="bpmHeadshot" src="./headshot.png" alt="Headshot">
+      </div>
+
+      <!-- ✅ NEW: headshot sits in the gray empty space area -->
+      <div class="headshotSlot" aria-hidden="true">
+        <img class="bpmHeadshot" src="./headshot.png" alt="">
       </div>
 
       <div class="pill">
