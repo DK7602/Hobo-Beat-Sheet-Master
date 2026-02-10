@@ -2,7 +2,7 @@
 (() => {
 "use strict";
 
-const APP_VERSION = "v20260210_1"; // bump so you can confirm update is live
+const APP_VERSION = "v20260210_2"; // bump so you can confirm update is live
 
 const need = (id) => document.getElementById(id);
 const els = {
@@ -16,8 +16,8 @@ const els = {
   toast: need("toast"),
   statusText: need("statusText"),
 
-  headerToggle: need("headerToggle"),   // ✅ NEW
-  headerToggle2: need("headerToggle2"), // ✅ NEW
+  headerToggle: need("headerToggle"),
+  headerToggle2: need("headerToggle2"),
 
   sectionTabs: need("sectionTabs"),
   bars: need("bars"),
@@ -37,10 +37,10 @@ const els = {
   dockToggle: need("dockToggle"),
 };
 
-const STORAGE_KEY = "beatsheetpro_projects_v1";          // ✅ NEW key (fresh app)
+const STORAGE_KEY = "beatsheetpro_projects_v1";
 const RHYME_CACHE_KEY = "beatsheetpro_rhyme_cache_v1";
 const DOCK_HIDDEN_KEY = "beatsheetpro_rhymeDock_hidden_v1";
-const HEADER_COLLAPSED_KEY = "beatsheetpro_header_collapsed_v1"; // ✅ NEW
+const HEADER_COLLAPSED_KEY = "beatsheetpro_header_collapsed_v1";
 
 const SECTION_DEFS = [
   { key:"verse1",  title:"Verse 1",  bars:16, extra:4 },
@@ -52,7 +52,6 @@ const SECTION_DEFS = [
   { key:"bridge",  title:"Bridge",   bars: 8, extra:4 },
 ];
 
-// FULL view order
 const FULL_ORDER = ["verse1","chorus1","verse2","chorus2","verse3","bridge","chorus3"];
 const FULL_HEADINGS = FULL_ORDER.map(k => (SECTION_DEFS.find(s=>s.key===k)?.title || k).toUpperCase());
 const headingSet = new Set(FULL_HEADINGS);
@@ -80,7 +79,7 @@ function clampInt(v,min,max){
   return Math.max(min, Math.min(max, v));
 }
 
-// ---------- header collapse (✅ NEW) ----------
+// ---------- header collapse ----------
 function loadHeaderCollapsed(){
   try{ return localStorage.getItem(HEADER_COLLAPSED_KEY) === "1"; }catch{ return false; }
 }
@@ -92,7 +91,6 @@ function setHeaderCollapsed(isCollapsed){
   if(els.headerToggle)  els.headerToggle.textContent  = isCollapsed ? "Show" : "Hide";
   if(els.headerToggle2) els.headerToggle2.textContent = isCollapsed ? "Show" : "Hide";
   saveHeaderCollapsed(!!isCollapsed);
-  // keep rhyme dock spacing correct
   updateDockForKeyboard();
 }
 if(els.headerToggle){
@@ -108,7 +106,7 @@ if(els.headerToggle2){
   });
 }
 
-// ✅ Keep rhyme dock visible above keyboard (Android)
+// Keep rhyme dock visible above keyboard (Android)
 function updateDockForKeyboard(){
   const vv = window.visualViewport;
   if(!els.rhymeDock) return;
@@ -773,13 +771,14 @@ function clearTakeNameInput(){
   els.recordName.value = "";
 }
 
+/* ✅ CHANGED: button text now Record / Stop */
 function updateRecordButtonUI(){
   if(!els.recordBtn) return;
   if(recording){
-    els.recordBtn.textContent = "■";
+    els.recordBtn.textContent = "Stop";
     els.recordBtn.classList.add("recOn");
   }else{
-    els.recordBtn.textContent = "●";
+    els.recordBtn.textContent = "Record";
     els.recordBtn.classList.remove("recOn");
   }
 }
@@ -863,7 +862,6 @@ function renderRecordings(){
     const row = document.createElement("div");
     row.className = "audioItem";
 
-    // Left: label or edit input
     if(editingRecId === rec.id){
       const input = document.createElement("input");
       input.type = "text";
@@ -913,7 +911,6 @@ function renderRecordings(){
     const icons = document.createElement("div");
     icons.className = "iconRow";
 
-    // i (edit)
     const editBtn = document.createElement("button");
     editBtn.className = "iconBtn";
     editBtn.title = "Edit name";
@@ -928,7 +925,6 @@ function renderRecordings(){
       });
     });
 
-    // ▶ play (green)
     const playBtn = document.createElement("button");
     playBtn.className = "iconBtn play";
     playBtn.title = "Play";
@@ -943,7 +939,6 @@ function renderRecordings(){
       }
     });
 
-    // ■ stop (black)
     const stopBtn = document.createElement("button");
     stopBtn.className = "iconBtn stop";
     stopBtn.title = "Stop";
@@ -953,14 +948,12 @@ function renderRecordings(){
       renderRecordings();
     });
 
-    // ⬇ download
     const dlBtn = document.createElement("button");
     dlBtn.className = "iconBtn";
     dlBtn.title = "Download";
     dlBtn.textContent = "⬇";
     dlBtn.addEventListener("click", ()=>downloadRec(rec));
 
-    // × delete
     const delBtn = document.createElement("button");
     delBtn.className = "iconBtn delete";
     delBtn.title = "Delete";
