@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Beat Sheet Pro</title>
-  <link rel="manifest" href="./manifest.webmanifest?v=20260210_2">
+<link rel="manifest" href="./manifest.webmanifest?v=20260210_4">
 
   <style>
     :root{
@@ -130,23 +130,58 @@
 
     /* ✅ NEW: headshot lives in the gray area, not inside BPM pill */
     .headshotSlot{
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      flex:1 1 auto;        /* takes the leftover gray space */
-      min-width:72px;
-    }
-    .bpmHeadshot{
-      width:64px;
-      height:64px;
-      object-fit:contain;
-      border-radius:16px;
-      background:transparent;
-      border:0;
-      box-shadow:none;
-      pointer-events:none;
-    }
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex:1 1 auto;
+  min-width:72px;
+}
 
+/* headshot container so we can overlay eye dots */
+.headshotWrap{
+  position:relative;
+  width:64px;
+  height:64px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  pointer-events:none;
+}
+
+.bpmHeadshot{
+  width:64px;
+  height:64px;
+  object-fit:contain;
+  border-radius:16px;
+  background:transparent;
+  border:0;
+  box-shadow:none;
+  pointer-events:none;
+}
+
+/* red blinking "eyes" overlay (tuned for 64x64 image) */
+.eyeDot{
+  position:absolute;
+  width:10px;
+  height:10px;
+  border-radius:999px;
+  background: rgba(255, 43, 43, 0);
+  opacity:0;
+  transform: scale(.7);
+  transition: opacity .05s linear, transform .05s linear;
+  pointer-events:none;
+  top: 14px; /* adjust if eyes sit higher/lower */
+}
+
+.eyeDot.left{ left: 21px; }   /* adjust if needed */
+.eyeDot.right{ left: 36px; }  /* adjust if needed */
+
+.eyeDot.on{
+  opacity:1;
+  background: var(--red);
+  transform: scale(1);
+  box-shadow: 0 0 10px 4px rgba(255, 43, 43, .55);
+}
     .tabs{
       display:flex;
       gap:8px;
@@ -598,7 +633,11 @@
 
       <!-- ✅ NEW: headshot sits in the gray empty space area -->
       <div class="headshotSlot" aria-hidden="true">
-        <img class="bpmHeadshot" src="./headshot.png" alt="">
+  <div class="headshotWrap">
+    <img class="bpmHeadshot" src="./headshot.png" alt="">
+    <span id="eyeL" class="eyeDot left"></span>
+    <span id="eyeR" class="eyeDot right"></span>
+  </div>
       </div>
 
       <div class="pill">
@@ -676,6 +715,6 @@
 
   <div class="toast" id="toast">Saved</div>
 
-  <script src="./app.js?v=20260210_2"></script>
+<script src="./app.js?v=20260210_4"></script>
 </body>
 </html>
