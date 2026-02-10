@@ -116,17 +116,23 @@
     }
     input[type="number"]{ width:88px; font-weight:1000; }
 
-    /* ✅ NEW: headshot next to BPM — sized to NOT increase row height */
-    .bpmHeadshot{
-      width:28px;
-      height:28px;
-      border-radius:999px;
-      object-fit:cover;
-      display:block;
-      flex:0 0 auto;
-      border:1px solid rgba(0,0,0,.18);
-      box-shadow:0 4px 10px rgba(0,0,0,.06);
-    }
+/* ✅ Headshot next to BPM — NO circle, NO cropping */
+.bpmHeadshot{
+  width:34px;              /* slightly wider looks better */
+  height:28px;             /* keeps row height the same */
+  border-radius:8px;       /* small rounding (not a circle) */
+  object-fit:contain;      /* ✅ shows whole image, no crop */
+  object-position:center;
+  display:block;
+  flex:0 0 auto;
+
+  /* sit clean on the gray header background */
+  background: transparent; /* important: no white box behind it */
+
+  /* optional: keep a subtle border; remove if you want totally clean */
+  border:1px solid rgba(0,0,0,.14);
+  box-shadow:none;         /* remove shadow so it blends into gray */
+}
 
     .tabs{
       display:flex;
