@@ -118,13 +118,17 @@
 
 /* ✅ Headshot next to BPM — NO circle, NO cropping */
 .bpmHeadshot{
-  width:34px;              /* slightly wider looks better */
-  height:28px;             /* keeps row height the same */
-  border-radius:8px;       /* small rounding (not a circle) */
-  object-fit:contain;      /* ✅ shows whole image, no crop */
+  width:44px;
+  height:28px;
+  border-radius:10px;
+  object-fit:contain;
   object-position:center;
   display:block;
   flex:0 0 auto;
+  background:transparent;
+  border:0;
+  box-shadow:none;
+}
 
   /* sit clean on the gray header background */
   background: transparent; /* important: no white box behind it */
