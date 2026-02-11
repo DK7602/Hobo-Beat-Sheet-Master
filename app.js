@@ -1,17 +1,9 @@
-/* Beat Sheet Pro - app.js (FULL REPLACE) */
+/* Beat Sheet Pro - app.js (FULL REPLACE - RESTORE STABLE) */
 (() => {
   "use strict";
 
-  /**
-   ✅ STORAGE ISOLATION (IMPORTANT)
-   This scopes localStorage keys to the FIRST folder in the URL path.
-   Examples:
-   https://dk7602.github.io/Beat-Sheet-Pro/           => scope "Beat-Sheet-Pro"
-   https://dk7602.github.io/Beat-Sheet-Pro---Shared/  => scope "Beat-Sheet-Pro---Shared"
-   Result: Main + Shared DO NOT share projects/recordings anymore.
-  */
+  const APP_VERSION = "v20260210_RESTORE_STABLE";
 
-  const APP_VERSION = "v20260210_4";
   const need = (id) => document.getElementById(id);
   const els = {
     exportBtn: need("exportBtn"),
@@ -45,42 +37,13 @@
     dockToggle: need("dockToggle"),
   };
 
-  // ✅ NEW: repo-scoped storage keys
-  const STORAGE_SCOPE = (() => {
-    const firstFolder = (location.pathname.split("/").filter(Boolean)[0] || "root");
-    return firstFolder.replace(/[^a-z0-9_-]+/gi, "_");
-  })();
-  const KEY_PREFIX = `beatsheetpro__${STORAGE_SCOPE}__`;
+  // ----- storage (OLD stable keys) -----
+  const STORAGE_KEY = "beatsheetpro_projects_v1";
+  const RHYME_CACHE_KEY = "beatsheetpro_rhyme_cache_v1";
+  const DOCK_HIDDEN_KEY = "beatsheetpro_rhymeDock_hidden_v1";
+  const HEADER_COLLAPSED_KEY = "beatsheetpro_header_collapsed_v1";
 
-  const STORAGE_KEY = `${KEY_PREFIX}projects_v1`;
-  const RHYME_CACHE_KEY = `${KEY_PREFIX}rhyme_cache_v1`;
-  const DOCK_HIDDEN_KEY = `${KEY_PREFIX}rhymeDock_hidden_v1`;
-  const HEADER_COLLAPSED_KEY = `${KEY_PREFIX}header_collapsed_v1`;
-
-  // ✅ Optional: clean separation from old global keys (pre-scope)
-  const OLD_STORAGE_KEY = "beatsheetpro_projects_v1";
-  const OLD_RHYME_CACHE_KEY = "beatsheetpro_rhyme_cache_v1";
-  const OLD_DOCK_HIDDEN_KEY = "beatsheetpro_rhymeDock_hidden_v1";
-  const OLD_HEADER_COLLAPSED_KEY = "beatsheetpro_header_collapsed_v1";
-
-  (function migrateOldKeysOnce() {
-    try {
-      // only migrate if new scoped key is empty and old exists
-      if (!localStorage.getItem(STORAGE_KEY) && localStorage.getItem(OLD_STORAGE_KEY)) {
-        localStorage.setItem(STORAGE_KEY, localStorage.getItem(OLD_STORAGE_KEY));
-      }
-      if (!localStorage.getItem(RHYME_CACHE_KEY) && localStorage.getItem(OLD_RHYME_CACHE_KEY)) {
-        localStorage.setItem(RHYME_CACHE_KEY, localStorage.getItem(OLD_RHYME_CACHE_KEY));
-      }
-      if (!localStorage.getItem(DOCK_HIDDEN_KEY) && localStorage.getItem(OLD_DOCK_HIDDEN_KEY)) {
-        localStorage.setItem(DOCK_HIDDEN_KEY, localStorage.getItem(OLD_DOCK_HIDDEN_KEY));
-      }
-      if (!localStorage.getItem(HEADER_COLLAPSED_KEY) && localStorage.getItem(OLD_HEADER_COLLAPSED_KEY)) {
-        localStorage.setItem(HEADER_COLLAPSED_KEY, localStorage.getItem(OLD_HEADER_COLLAPSED_KEY));
-      }
-    } catch {}
-  })();
-
+  // ----- sections -----
   const SECTION_DEFS = [
     { key: "verse1", title: "Verse 1", bars: 16, extra: 4 },
     { key: "chorus1", title: "Chorus 1", bars: 12, extra: 4 },
@@ -92,10 +55,12 @@
   ];
 
   const FULL_ORDER = ["verse1", "chorus1", "verse2", "chorus2", "verse3", "bridge", "chorus3"];
-  const FULL_HEADINGS = FULL_ORDER.map((k) => (SECTION_DEFS.find((s) => s.key === k)?.title || k).toUpperCase());
+  const FULL_HEADINGS = FULL_ORDER.map(
+    (k) => (SECTION_DEFS.find((s) => s.key === k)?.title || k).toUpperCase()
+  );
   const headingSet = new Set(FULL_HEADINGS);
 
-  // ---------- utils ----------
+  // ----- utils -----
   const nowISO = () => new Date().toISOString();
   const uid = () => Math.random().toString(16).slice(2) + "-" + Date.now().toString(16);
 
@@ -107,12 +72,12 @@
   }
 
   function escapeHtml(s) {
-    return String(s || "").replace(/[&<>"]/g, (c) => ({
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-    }[c]));
+    return String(s ?? "").replace(/[&<>"]/g, (c) => {
+      if (c === "&") return "&amp;";
+      if (c === "<") return "&lt;";
+      if (c === ">") return "&gt;";
+      return "&quot;";
+    });
   }
 
   function clampInt(v, min, max) {
@@ -120,26 +85,20 @@
     return Math.max(min, Math.min(max, v));
   }
 
-  // ---------- active typing target (for rhyme insert) ----------
+  // ----- typing target for rhyme insert -----
   let lastTypingTarget = null;
-
-  function isTextTarget(el) {
-    return !!el && el.tagName === "TEXTAREA";
-  }
+  const isTextTarget = (el) => !!el && el.tagName === "TEXTAREA";
   function setLastTypingTarget(el) {
     if (isTextTarget(el)) lastTypingTarget = el;
   }
-
-  // Track the last textarea you touched anywhere in the app
   document.addEventListener("focusin", (e) => {
     if (isTextTarget(e.target)) setLastTypingTarget(e.target);
   });
 
-  // ---------- headshot eye blink ----------
+  // ----- headshot eye blink -----
   let eyePulseTimer = null;
 
   function headerIsVisibleForEyes() {
-    // only blink when upper section is NOT hidden
     return !document.body.classList.contains("headerCollapsed");
   }
 
@@ -168,11 +127,11 @@
 
     const p = getActiveProject();
     const bpm = clampInt(parseInt(els.bpm?.value || p?.bpm || 95, 10), 40, 240);
-    const intervalMs = 60000 / bpm; // quarter note pulse
+    const intervalMs = 60000 / bpm; // quarter note
     eyePulseTimer = setInterval(() => flashEyes(), intervalMs);
   }
 
-  // ---------- header collapse ----------
+  // ----- header collapse -----
   function loadHeaderCollapsed() {
     try {
       return localStorage.getItem(HEADER_COLLAPSED_KEY) === "1";
@@ -192,14 +151,14 @@
     saveHeaderCollapsed(!!isCollapsed);
     updateDockForKeyboard();
 
-    // Don't blink when header is hidden
     if (isCollapsed) stopEyePulse();
     else {
       if (metroOn) {
-      } // metronome tick will blink
-      else if (recording) startEyePulseFromBpm();
+        // metronome drives blink
+      } else if (recording) startEyePulseFromBpm();
     }
   }
+
   if (els.headerToggle) {
     els.headerToggle.addEventListener("click", () => {
       const collapsed = document.body.classList.contains("headerCollapsed");
@@ -213,7 +172,7 @@
     });
   }
 
-  // Keep rhyme dock visible above keyboard (Android)
+  // ----- keep rhyme dock above keyboard -----
   function updateDockForKeyboard() {
     const vv = window.visualViewport;
     if (!els.rhymeDock) return;
@@ -221,16 +180,17 @@
       els.rhymeDock.style.bottom = "10px";
       return;
     }
-    const keyboardPx = Math.max(0, (window.innerHeight - vv.height - vv.offsetTop));
-    els.rhymeDock.style.bottom = (10 + keyboardPx) + "px";
+    const keyboardPx = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    els.rhymeDock.style.bottom = 10 + keyboardPx + "px";
   }
+
   if (window.visualViewport) {
     window.visualViewport.addEventListener("resize", updateDockForKeyboard);
     window.visualViewport.addEventListener("scroll", updateDockForKeyboard);
   }
   window.addEventListener("resize", updateDockForKeyboard);
 
-  // ---------- rhyme dock hide/show ----------
+  // ----- rhyme dock hide/show -----
   function loadDockHidden() {
     try {
       return localStorage.getItem(DOCK_HIDDEN_KEY) === "1";
@@ -250,6 +210,7 @@
     saveDockHidden(!!isHidden);
     updateDockForKeyboard();
   }
+
   if (els.dockToggle) {
     els.dockToggle.addEventListener("click", () => {
       const nowHidden = els.rhymeDock?.classList?.contains("dockHidden");
@@ -257,7 +218,7 @@
     });
   }
 
-  // ---------- syllables ----------
+  // ----- syllables -----
   function normalizeWord(w) {
     return (w || "").toLowerCase().replace(/[^a-z']/g, "");
   }
@@ -267,13 +228,13 @@
     "dont": 1, "don't": 1, "cant": 1, "can't": 1, "wont": 1, "won't": 1, "aint": 1, "ain't": 1,
     "yeah": 1, "ya": 1, "yup": 1, "nah": 1, "yall": 1, "y'all": 1, "bruh": 1, "bro": 1,
     "wanna": 2, "gonna": 2, "tryna": 2, "lemme": 2, "gotta": 2, "kinda": 2, "outta": 2,
-    "toyota": 3, "hiphop": 2, "gfunk": 2, "gangsta": 2, "birthday": 2,
+    "toyota": 3, "hiphop": 2, "gfunk": 2, "gangsta": 2, "birthday": 2
   };
 
   function countSyllablesWord(word) {
     if (!word) return 0;
 
-    // optional forced syllables like: "hello(3)"
+    // forced syllables like: hello(3)
     const forced = String(word).match(/\((\d+)\)\s*$/);
     if (forced) return Math.max(1, parseInt(forced[1], 10));
 
@@ -297,7 +258,7 @@
   }
 
   function countSyllablesLine(line) {
-    const clean = (line || "").replace(/[/]/g, " ").trim();
+    const clean = (line || "").replace(/[\/]/g, " ").trim();
     if (!clean) return 0;
     return clean.split(/\s+/).filter(Boolean).reduce((sum, w) => sum + countSyllablesWord(w), 0);
   }
@@ -311,134 +272,29 @@
     return "red";
   }
 
-  // ---------- beat splitting ----------
+  // ----- beat splitting -----
   function splitBySlashes(text) {
     const parts = (text || "").split("/").map((s) => s.trim());
     return [parts[0] || "", parts[1] || "", parts[2] || "", parts[3] || ""];
   }
 
   function autoSplitWords(text) {
-    const clean = (text || "").replace(/[/]/g, " ").trim();
+    const clean = (text || "").replace(/[\/]/g, " ").trim();
     if (!clean) return ["", "", "", ""];
     const words = clean.split(/\s+/);
     const per = Math.ceil(words.length / 4) || 1;
-    const per2 = per * 2;
-    const per3 = per * 3;
     return [
       words.slice(0, per).join(" "),
-      words.slice(per, per2).join(" "),
-      words.slice(per2, per3).join(" "),
-      words.slice(per3).join(" "),
+      words.slice(per, per * 2).join(" "),
+      words.slice(per * 2, per * 3).join(" "),
+      words.slice(per * 3).join(" "),
     ];
   }
 
-  function splitWordIntoChunks(word) {
-    const raw = String(word);
-    const cleaned = raw.replace(/[^A-Za-z']/g, "");
-    if (!cleaned) return [raw];
-    const groups = cleaned.match(/[aeiouy]+|[^aeiouy]+/gi) || [cleaned];
-    const out = [];
-    for (const g of groups) {
-      if (out.length && /^[^aeiouy]+$/i.test(g) && g.length <= 2) {
-        out[out.length - 1] += g;
-      } else out.push(g);
-    }
-    return out.length ? out : [raw];
-  }
-
-  function chunkSyllCount(chunk) {
-    const w = String(chunk).toLowerCase().replace(/[^a-z']/g, "").replace(/'/g, "");
-    const groups = w.match(/[aeiouy]+/g);
-    return Math.max(1, (groups ? groups.length : 0) || 1);
-  }
-
-  function buildTargets(total) {
-    const base = Math.floor(total / 4);
-    const rem = total % 4;
-    const t = [base, base, base, base];
-    for (let i = 0; i < rem; i++) t[i] += 1;
-    if (total < 4) {
-      t.fill(0);
-      for (let i = 0; i < total; i++) t[i] = 1;
-    }
-    return t;
-  }
-
+  // (stable: syllable split kept simple)
   function autoSplitSyllablesClean(text) {
-    const clean = (text || "").replace(/[/]/g, " ").trim();
-    if (!clean) return ["", "", "", ""];
-
-    const words = clean.split(/\s+/).filter(Boolean);
-    const sylls = words.map((w) => countSyllablesWord(w));
-    const total = sylls.reduce((a, b) => a + b, 0);
-    if (!total) return ["", "", "", ""];
-
-    const targets = buildTargets(total);
-    const beats = [[], [], [], []];
-    const beatSyll = [0, 0, 0, 0];
-    let b = 0;
-
-    function pushWord(beatIndex, w) { beats[beatIndex].push(w); }
-
-    for (let i = 0; i < words.length; i++) {
-      const w = words[i];
-      const s = sylls[i];
-
-      while (b < 3 && beatSyll[b] >= targets[b]) b++;
-      const remaining = targets[b] - beatSyll[b];
-      if (remaining <= 0 && b < 3) b++;
-
-      const rem2 = targets[b] - beatSyll[b];
-
-      if (s <= rem2 || b === 3) {
-        pushWord(b, w);
-        beatSyll[b] += s;
-        continue;
-      }
-
-      if (rem2 <= 1 && b < 3) {
-        b++;
-        pushWord(b, w);
-        beatSyll[b] += s;
-        continue;
-      }
-
-      const chunks = splitWordIntoChunks(w);
-      const chunkS = chunks.map(chunkSyllCount);
-
-      let take = [];
-      let takeSyll = 0;
-
-      for (let c = 0; c < chunks.length; c++) {
-        if (takeSyll + chunkS[c] > rem2 && take.length > 0) break;
-        take.push(chunks[c]);
-        takeSyll += chunkS[c];
-        if (takeSyll >= rem2) break;
-      }
-
-      if (!take.length) {
-        pushWord(b, w);
-        beatSyll[b] += s;
-        continue;
-      }
-
-      const left = take.join("");
-      const right = chunks.slice(take.length).join("");
-
-      pushWord(b, left);
-      beatSyll[b] += takeSyll;
-
-      if (b < 3) {
-        b++;
-        pushWord(b, right);
-        beatSyll[b] += Math.max(1, s - takeSyll);
-      } else {
-        pushWord(b, right);
-        beatSyll[b] += Math.max(1, s - takeSyll);
-      }
-    }
-
-    return beats.map((arr) => arr.join(" ").trim());
+    // Older stable behavior: use word split (keeps it predictable)
+    return autoSplitWords(text);
   }
 
   function computeBeats(text, mode) {
@@ -449,7 +305,7 @@
     return autoSplitSyllablesClean(text);
   }
 
-  // ---------- rhymes ----------
+  // ----- rhymes -----
   const rhymeCache = (() => {
     try { return JSON.parse(localStorage.getItem(RHYME_CACHE_KEY) || "{}"); }
     catch { return {}; }
@@ -458,6 +314,7 @@
   function saveRhymeCache() {
     try { localStorage.setItem(RHYME_CACHE_KEY, JSON.stringify(rhymeCache)); } catch {}
   }
+
   let rhymeAbort = null;
 
   function lastWord(str) {
@@ -475,20 +332,22 @@
 
   async function updateRhymes(seed) {
     const w = (seed || "").toLowerCase().replace(/[^a-z0-9']/g, "").trim();
+
     if (!w) {
-      els.rhymeBase.textContent = "Tap into a beat…";
-      els.rhymeList.innerHTML = `<span class="small">Rhymes appear for last word in previous beat box.</span>`;
+      if (els.rhymeBase) els.rhymeBase.textContent = "Tap into a beat…";
+      if (els.rhymeList) els.rhymeList.innerHTML =
+        `<span class="small">Rhymes appear for last word in previous beat box.</span>`;
       return;
     }
 
-    els.rhymeBase.textContent = w;
+    if (els.rhymeBase) els.rhymeBase.textContent = w;
 
     if (Array.isArray(rhymeCache[w]) && rhymeCache[w].length) {
       renderRhymes(rhymeCache[w]);
       return;
     }
 
-    els.rhymeList.innerHTML = `<span class="small">Loading…</span>`;
+    if (els.rhymeList) els.rhymeList.innerHTML = `<span class="small">Loading…</span>`;
 
     try {
       if (rhymeAbort) rhymeAbort.abort();
@@ -504,11 +363,15 @@
       renderRhymes(words);
     } catch (e) {
       if (String(e).includes("AbortError")) return;
-      els.rhymeList.innerHTML = `<span class="small" style="color:#b91c1c;">Rhyme lookup failed.</span>`;
+      if (els.rhymeList) {
+        els.rhymeList.innerHTML =
+          `<span class="small" style="color:#b91c1c;">Rhyme lookup failed.</span>`;
+      }
     }
   }
 
   function renderRhymes(words) {
+    if (!els.rhymeList) return;
     if (!words || !words.length) {
       els.rhymeList.innerHTML = `<span class="small">No rhymes found.</span>`;
       return;
@@ -525,7 +388,6 @@
     const w = (chip.getAttribute("data-rhyme") || chip.textContent || "").trim();
     if (!w) return;
 
-    // Prefer: currently focused textarea, else lastTypingTarget
     const active = (document.activeElement && isTextTarget(document.activeElement)) ? document.activeElement : null;
     const target = active || lastTypingTarget;
 
@@ -548,11 +410,10 @@
       return;
     }
 
-    // If no textarea exists (rare), do nothing (no clipboard behavior)
     showToast("Tap a text box first");
   });
 
-  // ---------- projects ----------
+  // ----- projects -----
   function blankSections() {
     const sections = {};
     for (const s of SECTION_DEFS) {
@@ -630,7 +491,7 @@
   function getActiveProject() { return store.projects.find((p) => p.id === store.activeProjectId) || store.projects[0]; }
   function touchProject(p) { p.updatedAt = nowISO(); saveStore(); }
 
-  // ---------- metronome ----------
+  // ----- metronome (WebAudio) -----
   let audioCtx = null;
   let metroGain = null;
   let recordDest = null;
@@ -673,9 +534,8 @@
     const bufferSize = Math.floor(audioCtx.sampleRate * 0.12);
     const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
     const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
-    }
+    for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+
     const noise = audioCtx.createBufferSource();
     noise.buffer = buffer;
 
@@ -702,9 +562,8 @@
     const bufferSize = Math.floor(audioCtx.sampleRate * 0.03);
     const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
     const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
-    }
+    for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+
     const noise = audioCtx.createBufferSource();
     noise.buffer = buffer;
 
@@ -745,7 +604,7 @@
     ensureAudio();
     if (audioCtx.state === "suspended") audioCtx.resume();
     stopMetronome();
-    stopEyePulse(); // metronome drives the blink, so no separate pulse
+    stopEyePulse(); // metronome drives blink
 
     metroOn = true;
     els.metroBtn.textContent = "Stop";
@@ -755,14 +614,14 @@
     const tick = () => {
       const p = getActiveProject();
       const bpm = clampInt(parseInt(els.bpm.value || p.bpm, 10), 40, 240);
-
-      const intervalMs = 60000 / bpm / 4;
+      const intervalMs = 60000 / bpm / 4; // 16th notes
       const step16 = metroBeat16 % 16;
       const beatInBar = Math.floor(step16 / 4);
 
       playHat();
       if (step16 === 0 || step16 === 8) playKick();
       if (step16 === 4 || step16 === 12) playSnare();
+
       if (step16 % 4 === 0) {
         flashBeats(beatInBar);
         flashEyes();
@@ -782,12 +641,11 @@
     els.metroBtn.textContent = "Metronome";
     els.metroBtn.classList.remove("on");
 
-    // If you stop the metronome while still recording, keep blinking on BPM
     if (recording) startEyePulseFromBpm();
     else stopEyePulse();
   }
 
-  // ---------- smooth playback (WebAudio) ----------
+  // ----- smooth playback -----
   let currentPlayback = null;
   let currentPlaybackId = null;
   const decodedCache = new Map();
@@ -856,7 +714,7 @@
     }
   }
 
-  // ---------- recording ----------
+  // ----- recording -----
   let recorder = null;
   let recChunks = [];
   let recording = false;
@@ -880,12 +738,7 @@
   }
 
   function pickBestMime() {
-    const candidates = [
-      "audio/webm;codecs=opus",
-      "audio/webm",
-      "audio/ogg;codecs=opus",
-      "audio/ogg",
-    ];
+    const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/ogg"];
     for (const m of candidates) {
       if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) return m;
     }
@@ -903,12 +756,11 @@
   function takeNameFromInput() {
     return (els.recordName?.value || "").trim();
   }
+
   function clearTakeNameInput() {
-    if (!els.recordName) return;
-    els.recordName.value = "";
+    if (els.recordName) els.recordName.value = "";
   }
 
-  /* ✅ CHANGED: button text now Record / Stop */
   function updateRecordButtonUI() {
     if (!els.recordBtn) return;
     if (recording) {
@@ -929,7 +781,6 @@
     recording = true;
     updateRecordButtonUI();
 
-    // If recording without metronome, still blink on BPM
     if (!metroOn) startEyePulseFromBpm();
     else stopEyePulse();
 
@@ -957,7 +808,6 @@
       const dataUrl = await blobToDataURL(blob);
 
       const p = getActiveProject();
-
       const typed = takeNameFromInput();
       const name = typed || `Take ${new Date().toLocaleString()}`;
 
@@ -973,7 +823,6 @@
       decodedCache.delete(rec.id);
 
       clearTakeNameInput();
-
       touchProject(p);
       renderRecordings();
       showToast("Saved take");
@@ -986,7 +835,6 @@
     if (recorder && recording) recorder.stop();
   }
 
-  // rename UI
   let editingRecId = null;
 
   function renderRecordings() {
@@ -1122,7 +970,7 @@
     }
   }
 
-  // ---------- FULL editor ----------
+  // ----- FULL editor (RESTORED stable behavior: 1 bar = 1 line; blanks = blank bars) -----
   function buildFullTextFromProject(p) {
     const out = [];
     for (const key of FULL_ORDER) {
@@ -1132,25 +980,22 @@
       const sec = p.sections[key];
       if (sec?.bars) {
         for (const b of sec.bars) {
-          const t = (b.text || "").replace(/\s+$/, "");
-          if (!t.trim()) continue;
-          out.push(t);
-          out.push("");
+          // IMPORTANT (restore stable): include every bar line, even if blank
+          out.push((b.text || "").replace(/\s+$/g, ""));
         }
       }
-      out.push("");
+      out.push(""); // spacer line between sections
     }
     return out.join("\n");
   }
 
   function applyFullTextToProject(p, fullText) {
     const lines = String(fullText || "").replace(/\r/g, "").split("\n");
-    let currentKey = null;
-    let writeIndex = 0;
 
+    // clear first
     for (const key of FULL_ORDER) {
       const sec = p.sections[key];
-      if (sec?.bars) sec.bars.forEach((b) => b.text = "");
+      if (sec?.bars) sec.bars.forEach((b) => (b.text = ""));
     }
 
     function headingToKey(line) {
@@ -1159,21 +1004,24 @@
       return def ? def.key : null;
     }
 
+    let currentKey = null;
+    let writeIndex = 0;
+
     for (const raw of lines) {
-      const key = headingToKey(raw);
-      if (key) {
-        currentKey = key;
+      const k = headingToKey(raw);
+      if (k) {
+        currentKey = k;
         writeIndex = 0;
         continue;
       }
       if (!currentKey) continue;
-      if (!String(raw).trim()) continue;
 
       const sec = p.sections[currentKey];
       if (!sec?.bars) continue;
       if (writeIndex >= sec.bars.length) continue;
 
-      sec.bars[writeIndex].text = raw.replace(/\s+$/, "");
+      // IMPORTANT (restore stable): each line corresponds to a bar, including blank lines
+      sec.bars[writeIndex].text = String(raw || "").replace(/\s+$/g, "");
       writeIndex++;
     }
 
@@ -1187,6 +1035,7 @@
     const before = text.slice(0, caret);
     const lines = before.replace(/\r/g, "").split("\n");
 
+    // Look upward for a non-heading line to rhyme off of
     let j = lines.length - 2;
     while (j >= 0) {
       const line = (lines[j] ?? "");
@@ -1209,7 +1058,7 @@
     updateRhymesFromFullCaret(ta);
   }, { passive: true });
 
-  // ---------- rendering ----------
+  // ----- rendering -----
   function renderProjectList() {
     const sort = store.projectSort || "recent";
     const projects = [...store.projects];
@@ -1220,6 +1069,7 @@
       projects.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
     }
 
+    if (!els.projectList) return;
     els.projectList.innerHTML = "";
     const active = getActiveProject();
 
@@ -1286,6 +1136,7 @@
 
   function renderTabs() {
     const p = getActiveProject();
+    if (!els.sectionTabs) return;
     els.sectionTabs.innerHTML = "";
 
     for (const s of SECTION_DEFS) {
@@ -1315,14 +1166,14 @@
 
   function renderBars() {
     const p = getActiveProject();
+    if (!els.bars) return;
 
     if (p.activeSection === "full") {
       const fullText = buildFullTextFromProject(p);
       els.bars.innerHTML = `
         <div class="fullBox">
           <div class="fullSub">
-            Paste + edit here. Rhymes follow the last word on the line ABOVE your cursor.<br>
-            ✅ Blank lines are just spacing (they do NOT create empty bars).<br>
+            Full view. One bar per line. Blank lines are blank bars.<br>
             Headings: ${FULL_HEADINGS.join(", ")}
           </div>
           <textarea id="fullEditor" class="fullEditor" spellcheck="false">${escapeHtml(fullText)}</textarea>
@@ -1345,7 +1196,6 @@
       ta.addEventListener("click", refresh);
       ta.addEventListener("keyup", refresh);
       ta.addEventListener("focus", refresh);
-
       return;
     }
 
@@ -1427,9 +1277,7 @@
 
         const modeNow = p.autoSplitMode || "syllables";
         const b = computeBeats(text, modeNow);
-        for (let i = 0; i < 4; i++) {
-          beatEls[i].innerHTML = escapeHtml(b[i] || "");
-        }
+        for (let i = 0; i < 4; i++) beatEls[i].innerHTML = escapeHtml(b[i] || "");
 
         refreshRhymesForCaret();
       });
@@ -1450,11 +1298,11 @@
     const p = getActiveProject();
     document.body.classList.toggle("fullMode", p.activeSection === "full");
 
-    els.projectName.value = p.name || "";
-    els.bpm.value = p.bpm || 95;
-    els.highlightMode.value = p.highlightMode || "focused";
-    els.autoSplitMode.value = p.autoSplitMode || "syllables";
-    els.projectSort.value = store.projectSort || "recent";
+    if (els.projectName) els.projectName.value = p.name || "";
+    if (els.bpm) els.bpm.value = p.bpm || 95;
+    if (els.highlightMode) els.highlightMode.value = p.highlightMode || "focused";
+    if (els.autoSplitMode) els.autoSplitMode.value = p.autoSplitMode || "syllables";
+    if (els.projectSort) els.projectSort.value = store.projectSort || "recent";
 
     renderTabs();
     renderProjectList();
@@ -1464,11 +1312,12 @@
     if (els.statusText) {
       els.statusText.textContent = `${APP_VERSION} • Updated ${new Date(p.updatedAt).toLocaleString()}`;
     }
+
     updateDockForKeyboard();
     updateRecordButtonUI();
   }
 
-  // ---------- events ----------
+  // ----- events -----
   els.newProjectBtn?.addEventListener("click", () => {
     const p = newProject("");
     store.projects.unshift(p);
@@ -1478,23 +1327,23 @@
     showToast("New project");
   });
 
-  els.projectName.addEventListener("input", (e) => {
+  els.projectName?.addEventListener("input", (e) => {
     const p = getActiveProject();
     p.name = e.target.value || "";
     touchProject(p);
     renderProjectList();
   });
 
-  els.saveBtn.addEventListener("click", () => {
+  els.saveBtn?.addEventListener("click", () => {
     const p = getActiveProject();
     touchProject(p);
     showToast("Saved");
   });
 
-  els.exportBtn.addEventListener("click", async () => {
+  els.exportBtn?.addEventListener("click", async () => {
     const p = getActiveProject();
     const lines = [];
-    lines.push(`${p.name || "Beat Sheet Pro Export"}`);
+    lines.push(p.name || "Beat Sheet Pro Export");
     lines.push(`Updated: ${new Date(p.updatedAt).toLocaleString()}`);
     lines.push("");
 
@@ -1523,14 +1372,14 @@
     }
   });
 
-  els.projectSort.addEventListener("change", () => {
+  els.projectSort?.addEventListener("change", () => {
     store.projectSort = els.projectSort.value || "recent";
     saveStore();
     renderProjectList();
     showToast("Sorted");
   });
 
-  els.bpm.addEventListener("change", () => {
+  els.bpm?.addEventListener("change", () => {
     const p = getActiveProject();
     p.bpm = clampInt(parseInt(els.bpm.value, 10), 40, 240);
     els.bpm.value = p.bpm;
@@ -1538,13 +1387,13 @@
     if (metroOn) startMetronome();
   });
 
-  els.highlightMode.addEventListener("change", () => {
+  els.highlightMode?.addEventListener("change", () => {
     const p = getActiveProject();
     p.highlightMode = els.highlightMode.value;
     touchProject(p);
   });
 
-  els.autoSplitMode.addEventListener("change", () => {
+  els.autoSplitMode?.addEventListener("change", () => {
     const p = getActiveProject();
     p.autoSplitMode = els.autoSplitMode.value;
     touchProject(p);
@@ -1552,12 +1401,12 @@
     showToast("Split mode");
   });
 
-  els.metroBtn.addEventListener("click", () => {
+  els.metroBtn?.addEventListener("click", () => {
     if (metroOn) stopMetronome();
     else startMetronome();
   });
 
-  els.recordBtn.addEventListener("click", async () => {
+  els.recordBtn?.addEventListener("click", async () => {
     try {
       if (!recording) await startRecording();
       else stopRecording();
@@ -1567,11 +1416,10 @@
     }
   });
 
-  // ---------- boot ----------
+  // ----- boot -----
   setDockHidden(loadDockHidden());
   setHeaderCollapsed(loadHeaderCollapsed());
 
   renderAll();
   updateRhymes("");
 })();
-```0
