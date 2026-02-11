@@ -11,8 +11,7 @@
    Result: Main + Shared DO NOT share projects/recordings anymore.
   */
 
-  const APP_VERSION = "v20260210_9_NO_HSCROLL_PATCH";
-
+  const APP_VERSION = "v20260210_4";
   const need = (id) => document.getElementById(id);
   const els = {
     exportBtn: need("exportBtn"),
@@ -46,42 +45,6 @@
     dockToggle: need("dockToggle"),
   };
 
-  // ✅ GLOBAL LAYOUT PATCH (fixes Android horizontal drift / header sliding)
-  (function injectNoHorizontalScrollPatch() {
-    if (document.getElementById("bspNoHScrollCSS")) return;
-    const st = document.createElement("style");
-    st.id = "bspNoHScrollCSS";
-    st.textContent = `
-      html, body{
-        max-width: 100%;
-        overflow-x: hidden !important;
-      }
-      *, *::before, *::after{
-        box-sizing: border-box;
-      }
-      /* guard common wrapper/header rows in case any are wider than viewport */
-      #app, .app, .container, .wrap, .header, .topbar, .toolbar, .controlsRow, .headerRow{
-        max-width: 100%;
-        overflow-x: hidden;
-      }
-      textarea, input, button{
-        max-width: 100%;
-      }
-      /* Full editor safety */
-      .fullBox, .fullGrid, .fullSection{
-        max-width: 100%;
-      }
-      .fullSection{
-        min-width: 0;
-      }
-      .fullEditor{
-        width: 100% !important;
-        max-width: 100% !important;
-      }
-    `;
-    document.head.appendChild(st);
-  })();
-
   // ✅ NEW: repo-scoped storage keys
   const STORAGE_SCOPE = (() => {
     const firstFolder = (location.pathname.split("/").filter(Boolean)[0] || "root");
@@ -102,6 +65,7 @@
 
   (function migrateOldKeysOnce() {
     try {
+      // only migrate if new scoped key is empty and old exists
       if (!localStorage.getItem(STORAGE_KEY) && localStorage.getItem(OLD_STORAGE_KEY)) {
         localStorage.setItem(STORAGE_KEY, localStorage.getItem(OLD_STORAGE_KEY));
       }
@@ -118,16 +82,18 @@
   })();
 
   const SECTION_DEFS = [
-    { key: "verse1",  title: "Verse 1",  bars: 16, extra: 4 },
+    { key: "verse1", title: "Verse 1", bars: 16, extra: 4 },
     { key: "chorus1", title: "Chorus 1", bars: 12, extra: 4 },
-    { key: "verse2",  title: "Verse 2",  bars: 16, extra: 4 },
+    { key: "verse2", title: "Verse 2", bars: 16, extra: 4 },
     { key: "chorus2", title: "Chorus 2", bars: 12, extra: 4 },
-    { key: "verse3",  title: "Verse 3",  bars: 16, extra: 4 },
+    { key: "verse3", title: "Verse 3", bars: 16, extra: 4 },
     { key: "chorus3", title: "Chorus 3", bars: 12, extra: 4 },
-    { key: "bridge",  title: "Bridge",   bars:  8, extra: 4 },
+    { key: "bridge", title: "Bridge", bars: 8, extra: 4 },
   ];
 
   const FULL_ORDER = ["verse1", "chorus1", "verse2", "chorus2", "verse3", "bridge", "chorus3"];
+  const FULL_HEADINGS = FULL_ORDER.map((k) => (SECTION_DEFS.find((s) => s.key === k)?.title || k).toUpperCase());
+  const headingSet = new Set(FULL_HEADINGS);
 
   // ---------- utils ----------
   const nowISO = () => new Date().toISOString();
@@ -145,7 +111,7 @@
       "&": "&amp;",
       "<": "&lt;",
       ">": "&gt;",
-      '"': "&quot;"
+      '"': "&quot;",
     }[c]));
   }
 
@@ -154,28 +120,17 @@
     return Math.max(min, Math.min(max, v));
   }
 
-  function normalizeNewlines(text) {
-    return String(text || "").replace(/\r/g, "");
-  }
-
-  function trimRightEachLine(text) {
-    return normalizeNewlines(text)
-      .split("\n")
-      .map(l => String(l).replace(/\s+$/g, ""))
-      .join("\n");
-  }
-
-  // ✅ treat whitespace-only (including NBSP / zero-width) as blank
-  function isBlankLine(line) {
-    const s = String(line ?? "");
-    const cleaned = s.replace(/[\s\u00A0\u200B\u200C\u200D\uFEFF]+/g, "");
-    return cleaned.length === 0;
-  }
-
   // ---------- active typing target (for rhyme insert) ----------
   let lastTypingTarget = null;
-  function isTextTarget(el) { return !!el && el.tagName === "TEXTAREA"; }
-  function setLastTypingTarget(el) { if (isTextTarget(el)) lastTypingTarget = el; }
+
+  function isTextTarget(el) {
+    return !!el && el.tagName === "TEXTAREA";
+  }
+  function setLastTypingTarget(el) {
+    if (isTextTarget(el)) lastTypingTarget = el;
+  }
+
+  // Track the last textarea you touched anywhere in the app
   document.addEventListener("focusin", (e) => {
     if (isTextTarget(e.target)) setLastTypingTarget(e.target);
   });
@@ -184,6 +139,7 @@
   let eyePulseTimer = null;
 
   function headerIsVisibleForEyes() {
+    // only blink when upper section is NOT hidden
     return !document.body.classList.contains("headerCollapsed");
   }
 
@@ -212,27 +168,35 @@
 
     const p = getActiveProject();
     const bpm = clampInt(parseInt(els.bpm?.value || p?.bpm || 95, 10), 40, 240);
-    const intervalMs = 60000 / bpm;
+    const intervalMs = 60000 / bpm; // quarter note pulse
     eyePulseTimer = setInterval(() => flashEyes(), intervalMs);
   }
 
   // ---------- header collapse ----------
   function loadHeaderCollapsed() {
-    try { return localStorage.getItem(HEADER_COLLAPSED_KEY) === "1"; } catch { return false; }
+    try {
+      return localStorage.getItem(HEADER_COLLAPSED_KEY) === "1";
+    } catch {
+      return false;
+    }
   }
   function saveHeaderCollapsed(isCollapsed) {
-    try { localStorage.setItem(HEADER_COLLAPSED_KEY, isCollapsed ? "1" : "0"); } catch {}
+    try {
+      localStorage.setItem(HEADER_COLLAPSED_KEY, isCollapsed ? "1" : "0");
+    } catch {}
   }
   function setHeaderCollapsed(isCollapsed) {
     document.body.classList.toggle("headerCollapsed", !!isCollapsed);
-    if (els.headerToggle)  els.headerToggle.textContent  = isCollapsed ? "Show" : "Hide";
+    if (els.headerToggle) els.headerToggle.textContent = isCollapsed ? "Show" : "Hide";
     if (els.headerToggle2) els.headerToggle2.textContent = isCollapsed ? "Show" : "Hide";
     saveHeaderCollapsed(!!isCollapsed);
     updateDockForKeyboard();
 
+    // Don't blink when header is hidden
     if (isCollapsed) stopEyePulse();
     else {
-      if (metroOn) {}
+      if (metroOn) {
+      } // metronome tick will blink
       else if (recording) startEyePulseFromBpm();
     }
   }
@@ -268,10 +232,16 @@
 
   // ---------- rhyme dock hide/show ----------
   function loadDockHidden() {
-    try { return localStorage.getItem(DOCK_HIDDEN_KEY) === "1"; } catch { return false; }
+    try {
+      return localStorage.getItem(DOCK_HIDDEN_KEY) === "1";
+    } catch {
+      return false;
+    }
   }
   function saveDockHidden(isHidden) {
-    try { localStorage.setItem(DOCK_HIDDEN_KEY, isHidden ? "1" : "0"); } catch {}
+    try {
+      localStorage.setItem(DOCK_HIDDEN_KEY, isHidden ? "1" : "0");
+    } catch {}
   }
   function setDockHidden(isHidden) {
     if (!els.rhymeDock || !els.dockToggle) return;
@@ -288,18 +258,25 @@
   }
 
   // ---------- syllables ----------
-  function normalizeWord(w) { return (w || "").toLowerCase().replace(/[^a-z']/g, ""); }
+  function normalizeWord(w) {
+    return (w || "").toLowerCase().replace(/[^a-z']/g, "");
+  }
 
   const SYLL_DICT = {
     "im": 1, "i'm": 1, "ive": 1, "i've": 1, "ill": 1, "i'll": 1, "id": 1, "i'd": 1,
     "dont": 1, "don't": 1, "cant": 1, "can't": 1, "wont": 1, "won't": 1, "aint": 1, "ain't": 1,
     "yeah": 1, "ya": 1, "yup": 1, "nah": 1, "yall": 1, "y'all": 1, "bruh": 1, "bro": 1,
     "wanna": 2, "gonna": 2, "tryna": 2, "lemme": 2, "gotta": 2, "kinda": 2, "outta": 2,
-    "toyota": 3, "hiphop": 2, "gfunk": 2, "gangsta": 2, "birthday": 2
+    "toyota": 3, "hiphop": 2, "gfunk": 2, "gangsta": 2, "birthday": 2,
   };
 
   function countSyllablesWord(word) {
     if (!word) return 0;
+
+    // optional forced syllables like: "hello(3)"
+    const forced = String(word).match(/\((\d+)\)\s*$/);
+    if (forced) return Math.max(1, parseInt(forced[1], 10));
+
     let w = normalizeWord(word);
     if (!w) return 0;
     if (SYLL_DICT[w] != null) return SYLL_DICT[w];
@@ -336,7 +313,7 @@
 
   // ---------- beat splitting ----------
   function splitBySlashes(text) {
-    const parts = (text || "").split("/").map(s => s.trim());
+    const parts = (text || "").split("/").map((s) => s.trim());
     return [parts[0] || "", parts[1] || "", parts[2] || "", parts[3] || ""];
   }
 
@@ -362,8 +339,9 @@
     const groups = cleaned.match(/[aeiouy]+|[^aeiouy]+/gi) || [cleaned];
     const out = [];
     for (const g of groups) {
-      if (out.length && /^[^aeiouy]+$/i.test(g) && g.length <= 2) out[out.length - 1] += g;
-      else out.push(g);
+      if (out.length && /^[^aeiouy]+$/i.test(g) && g.length <= 2) {
+        out[out.length - 1] += g;
+      } else out.push(g);
     }
     return out.length ? out : [raw];
   }
@@ -391,7 +369,7 @@
     if (!clean) return ["", "", "", ""];
 
     const words = clean.split(/\s+/).filter(Boolean);
-    const sylls = words.map(w => countSyllablesWord(w));
+    const sylls = words.map((w) => countSyllablesWord(w));
     const total = sylls.reduce((a, b) => a + b, 0);
     if (!total) return ["", "", "", ""];
 
@@ -460,7 +438,7 @@
       }
     }
 
-    return beats.map(arr => arr.join(" ").trim());
+    return beats.map((arr) => arr.join(" ").trim());
   }
 
   function computeBeats(text, mode) {
@@ -480,7 +458,6 @@
   function saveRhymeCache() {
     try { localStorage.setItem(RHYME_CACHE_KEY, JSON.stringify(rhymeCache)); } catch {}
   }
-
   let rhymeAbort = null;
 
   function lastWord(str) {
@@ -520,12 +497,11 @@
       const url = `https://api.datamuse.com/words?rel_rhy=${encodeURIComponent(w)}&max=18`;
       const res = await fetch(url, { signal: rhymeAbort.signal });
       const data = await res.json();
-      const words = (data || []).map(x => x.word).filter(Boolean);
+      const words = (data || []).map((x) => x.word).filter(Boolean);
 
       rhymeCache[w] = words;
       saveRhymeCache();
       renderRhymes(words);
-
     } catch (e) {
       if (String(e).includes("AbortError")) return;
       els.rhymeList.innerHTML = `<span class="small" style="color:#b91c1c;">Rhyme lookup failed.</span>`;
@@ -538,7 +514,7 @@
       return;
     }
     els.rhymeList.innerHTML = words.slice(0, 18)
-      .map(w => `<button type="button" class="rhymeChip" data-rhyme="${escapeHtml(w)}">${escapeHtml(w)}</button>`)
+      .map((w) => `<button type="button" class="rhymeChip" data-rhyme="${escapeHtml(w)}">${escapeHtml(w)}</button>`)
       .join("");
   }
 
@@ -549,6 +525,7 @@
     const w = (chip.getAttribute("data-rhyme") || chip.textContent || "").trim();
     if (!w) return;
 
+    // Prefer: currently focused textarea, else lastTypingTarget
     const active = (document.activeElement && isTextTarget(document.activeElement)) ? document.activeElement : null;
     const target = active || lastTypingTarget;
 
@@ -571,6 +548,7 @@
       return;
     }
 
+    // If no textarea exists (rare), do nothing (no clipboard behavior)
     showToast("Tap a text box first");
   });
 
@@ -582,7 +560,6 @@
         key: s.key,
         title: s.title,
         bars: Array.from({ length: s.bars + s.extra }, () => ({ text: "" })),
-        fullText: ""
       };
     }
     return sections;
@@ -620,63 +597,6 @@
 
   let store = loadStore();
 
-  function ensureSectionFullText(sec) {
-    if (!sec) return;
-    if (typeof sec.fullText === "string" && sec.fullText.length) return;
-
-    const lines = (sec.bars || [])
-      .map(b => String(b?.text ?? "").replace(/\s+$/g, ""))
-      .filter(l => !isBlankLine(l));
-    sec.fullText = lines.join("\n");
-  }
-
-  function syncBarsFromFullText(sec) {
-    if (!sec?.bars) return;
-
-    ensureSectionFullText(sec);
-
-    const nonEmpty = trimRightEachLine(sec.fullText)
-      .split("\n")
-      .filter(l => !isBlankLine(l));
-
-    sec.bars.forEach(b => b.text = "");
-    for (let i = 0; i < Math.min(nonEmpty.length, sec.bars.length); i++) {
-      sec.bars[i].text = nonEmpty[i];
-    }
-  }
-
-  function updateFullTextLineForBar(sec, barIndex, newText) {
-    if (!sec) return;
-    ensureSectionFullText(sec);
-
-    const rawLines = normalizeNewlines(sec.fullText).split("\n");
-    const nonEmptyIdx = [];
-    for (let i = 0; i < rawLines.length; i++) {
-      if (!isBlankLine(rawLines[i])) nonEmptyIdx.push(i);
-    }
-
-    if (!rawLines.length && (sec.bars?.length)) {
-      const fallback = (sec.bars || [])
-        .map(b => String(b?.text ?? "").replace(/\s+$/g, ""))
-        .filter(l => !isBlankLine(l))
-        .join("\n");
-      sec.fullText = fallback;
-      return updateFullTextLineForBar(sec, barIndex, newText);
-    }
-
-    const line = String(newText ?? "");
-
-    if (barIndex < nonEmptyIdx.length) {
-      rawLines[nonEmptyIdx[barIndex]] = line;
-    } else {
-      rawLines.push(line);
-    }
-
-    let end = rawLines.length;
-    while (end > 0 && isBlankLine(rawLines[end - 1])) end--;
-    sec.fullText = rawLines.slice(0, end).join("\n");
-  }
-
   function repairProject(p) {
     if (!p.sections || typeof p.sections !== "object") p.sections = blankSections();
     for (const def of SECTION_DEFS) {
@@ -685,11 +605,8 @@
           key: def.key,
           title: def.title,
           bars: Array.from({ length: def.bars + def.extra }, () => ({ text: "" })),
-          fullText: ""
         };
       }
-      ensureSectionFullText(p.sections[def.key]);
-      syncBarsFromFullText(p.sections[def.key]);
     }
     if (!p.activeSection) p.activeSection = "verse1";
     if (!Array.isArray(p.recordings)) p.recordings = [];
@@ -705,12 +622,12 @@
     store.projects = [p];
     store.activeProjectId = p.id;
   }
-  if (!store.activeProjectId || !store.projects.find(p => p.id === store.activeProjectId)) {
+  if (!store.activeProjectId || !store.projects.find((p) => p.id === store.activeProjectId)) {
     store.activeProjectId = store.projects[0].id;
   }
 
   function saveStore() { localStorage.setItem(STORAGE_KEY, JSON.stringify(store)); }
-  function getActiveProject() { return store.projects.find(p => p.id === store.activeProjectId) || store.projects[0]; }
+  function getActiveProject() { return store.projects.find((p) => p.id === store.activeProjectId) || store.projects[0]; }
   function touchProject(p) { p.updatedAt = nowISO(); saveStore(); }
 
   // ---------- metronome ----------
@@ -756,7 +673,9 @@
     const bufferSize = Math.floor(audioCtx.sampleRate * 0.12);
     const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
     const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+    }
     const noise = audioCtx.createBufferSource();
     noise.buffer = buffer;
 
@@ -783,7 +702,9 @@
     const bufferSize = Math.floor(audioCtx.sampleRate * 0.03);
     const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
     const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+    }
     const noise = audioCtx.createBufferSource();
     noise.buffer = buffer;
 
@@ -811,19 +732,20 @@
     const highlight = p.highlightMode || "focused";
     const barEls = document.querySelectorAll(".bar");
     const targets = (highlight === "all") ? Array.from(barEls) : [barEls[focusedBarIdx] || barEls[0]];
-    targets.forEach(barEl => {
+    targets.forEach((barEl) => {
       const beats = barEl?.querySelectorAll(".beat");
       if (!beats || beats.length < 4) return;
-      beats.forEach(b => b.classList.remove("flash"));
+      beats.forEach((b) => b.classList.remove("flash"));
       beats[beatInBar]?.classList.add("flash");
-      setTimeout(() => beats.forEach(b => b.classList.remove("flash")), 90);
+      setTimeout(() => beats.forEach((b) => b.classList.remove("flash")), 90);
     });
   }
 
   function startMetronome() {
     ensureAudio();
     if (audioCtx.state === "suspended") audioCtx.resume();
-    stopMetronome(); stopEyePulse();
+    stopMetronome();
+    stopEyePulse(); // metronome drives the blink, so no separate pulse
 
     metroOn = true;
     els.metroBtn.textContent = "Stop";
@@ -860,6 +782,7 @@
     els.metroBtn.textContent = "Metronome";
     els.metroBtn.classList.remove("on");
 
+    // If you stop the metronome while still recording, keep blinking on BPM
     if (recording) startEyePulseFromBpm();
     else stopEyePulse();
   }
@@ -945,7 +868,7 @@
   async function ensureMic() {
     if (micStream) return;
     micStream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
     ensureAudio();
     micSource = audioCtx.createMediaStreamSource(micStream);
@@ -961,7 +884,7 @@
       "audio/webm;codecs=opus",
       "audio/webm",
       "audio/ogg;codecs=opus",
-      "audio/ogg"
+      "audio/ogg",
     ];
     for (const m of candidates) {
       if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) return m;
@@ -977,9 +900,15 @@
     });
   }
 
-  function takeNameFromInput() { return (els.recordName?.value || "").trim(); }
-  function clearTakeNameInput() { if (els.recordName) els.recordName.value = ""; }
+  function takeNameFromInput() {
+    return (els.recordName?.value || "").trim();
+  }
+  function clearTakeNameInput() {
+    if (!els.recordName) return;
+    els.recordName.value = "";
+  }
 
+  /* ✅ CHANGED: button text now Record / Stop */
   function updateRecordButtonUI() {
     if (!els.recordBtn) return;
     if (recording) {
@@ -1000,6 +929,7 @@
     recording = true;
     updateRecordButtonUI();
 
+    // If recording without metronome, still blink on BPM
     if (!metroOn) startEyePulseFromBpm();
     else stopEyePulse();
 
@@ -1027,6 +957,7 @@
       const dataUrl = await blobToDataURL(blob);
 
       const p = getActiveProject();
+
       const typed = takeNameFromInput();
       const name = typed || `Take ${new Date().toLocaleString()}`;
 
@@ -1035,7 +966,7 @@
         name,
         createdAt: nowISO(),
         mime: blob.type || "audio/webm",
-        dataUrl
+        dataUrl,
       };
 
       p.recordings.unshift(rec);
@@ -1173,7 +1104,7 @@
         if (currentPlaybackId === rec.id) stopSmoothPlayback();
         if (editingRecId === rec.id) editingRecId = null;
         decodedCache.delete(rec.id);
-        p.recordings = p.recordings.filter(r => r.id !== rec.id);
+        p.recordings = p.recordings.filter((r) => r.id !== rec.id);
         touchProject(p);
         renderRecordings();
         showToast("Deleted");
@@ -1191,58 +1122,92 @@
     }
   }
 
-  // ---------- FULL editor (boxed headers + true blank-line persistence) ----------
-  function getSectionTitle(key) {
-    return (SECTION_DEFS.find(s => s.key === key)?.title || key);
+  // ---------- FULL editor ----------
+  function buildFullTextFromProject(p) {
+    const out = [];
+    for (const key of FULL_ORDER) {
+      const heading = (SECTION_DEFS.find((s) => s.key === key)?.title || key).toUpperCase();
+      out.push(heading);
+
+      const sec = p.sections[key];
+      if (sec?.bars) {
+        for (const b of sec.bars) {
+          const t = (b.text || "").replace(/\s+$/, "");
+          if (!t.trim()) continue;
+          out.push(t);
+          out.push("");
+        }
+      }
+      out.push("");
+    }
+    return out.join("\n");
   }
 
-  function buildSectionText(p, key) {
-    const sec = p.sections[key];
-    if (!sec) return "";
-    ensureSectionFullText(sec);
-    return normalizeNewlines(sec.fullText);
-  }
+  function applyFullTextToProject(p, fullText) {
+    const lines = String(fullText || "").replace(/\r/g, "").split("\n");
+    let currentKey = null;
+    let writeIndex = 0;
 
-  function applySectionTextToProject(p, key, text) {
-    const sec = p.sections[key];
-    if (!sec?.bars) return;
+    for (const key of FULL_ORDER) {
+      const sec = p.sections[key];
+      if (sec?.bars) sec.bars.forEach((b) => b.text = "");
+    }
 
-    sec.fullText = normalizeNewlines(text);
-    syncBarsFromFullText(sec);
+    function headingToKey(line) {
+      const up = String(line || "").trim().toUpperCase();
+      const def = SECTION_DEFS.find((s) => s.title.toUpperCase() === up);
+      return def ? def.key : null;
+    }
+
+    for (const raw of lines) {
+      const key = headingToKey(raw);
+      if (key) {
+        currentKey = key;
+        writeIndex = 0;
+        continue;
+      }
+      if (!currentKey) continue;
+      if (!String(raw).trim()) continue;
+
+      const sec = p.sections[currentKey];
+      if (!sec?.bars) continue;
+      if (writeIndex >= sec.bars.length) continue;
+
+      sec.bars[writeIndex].text = raw.replace(/\s+$/, "");
+      writeIndex++;
+    }
 
     touchProject(p);
   }
 
-  function updateRhymesFromFullBoxes(activeTa) {
-    if (!activeTa) { updateRhymes(""); return; }
-
-    const key = activeTa.getAttribute("data-fullkey") || "";
-    const text = activeTa.value || "";
-    const caret = activeTa.selectionStart || 0;
+  function updateRhymesFromFullCaret(fullTa) {
+    if (!fullTa) return;
+    const text = fullTa.value || "";
+    const caret = fullTa.selectionStart || 0;
     const before = text.slice(0, caret);
     const lines = before.replace(/\r/g, "").split("\n");
 
-    for (let i = lines.length - 2; i >= 0; i--) {
-      const line = (lines[i] ?? "").trim();
-      if (!line) continue;
-      updateRhymes(lastWord(line));
+    let j = lines.length - 2;
+    while (j >= 0) {
+      const line = (lines[j] ?? "");
+      const trimmed = line.trim();
+      if (!trimmed) { j--; continue; }
+      const up = trimmed.toUpperCase();
+      if (headingSet.has(up)) { j--; continue; }
+      updateRhymes(lastWord(trimmed));
       return;
     }
-
-    const idx = FULL_ORDER.indexOf(key);
-    for (let s = idx - 1; s >= 0; s--) {
-      const prevKey = FULL_ORDER[s];
-      const prevTa = els.bars.querySelector(`textarea.fullEditor[data-fullkey="${prevKey}"]`);
-      if (!prevTa) continue;
-      const prevLines = (prevTa.value || "").replace(/\r/g, "").split("\n").map(x => x.trim()).filter(Boolean);
-      if (prevLines.length) {
-        updateRhymes(lastWord(prevLines[prevLines.length - 1]));
-        return;
-      }
-    }
-
     updateRhymes("");
   }
+
+  document.addEventListener("selectionchange", () => {
+    const p = getActiveProject();
+    if (p.activeSection !== "full") return;
+    const ta = document.getElementById("fullEditor");
+    if (!ta) return;
+    if (document.activeElement !== ta) return;
+    updateRhymesFromFullCaret(ta);
+  }, { passive: true });
 
   // ---------- rendering ----------
   function renderProjectList() {
@@ -1303,8 +1268,10 @@
           showToast("Can't delete last project");
           return;
         }
-        store.projects = store.projects.filter(p => p.id !== proj.id);
-        if (store.activeProjectId === proj.id) store.activeProjectId = store.projects[0].id;
+        store.projects = store.projects.filter((p) => p.id !== proj.id);
+        if (store.activeProjectId === proj.id) {
+          store.activeProjectId = store.projects[0].id;
+        }
         saveStore();
         renderAll();
         showToast("Deleted");
@@ -1350,95 +1317,35 @@
     const p = getActiveProject();
 
     if (p.activeSection === "full") {
-      const sectionsHtml = FULL_ORDER.map((key) => {
-        const title = getSectionTitle(key).toUpperCase();
-        const text = buildSectionText(p, key);
-        return `
-          <div class="fullSection" data-fullwrap="${escapeHtml(key)}">
-            <div class="fullHeaderBox">${escapeHtml(title)}</div>
-            <textarea class="fullEditor" data-fullkey="${escapeHtml(key)}" spellcheck="false" placeholder="Type ${escapeHtml(title)} here…">${escapeHtml(text)}</textarea>
-          </div>
-        `;
-      }).join("");
-
+      const fullText = buildFullTextFromProject(p);
       els.bars.innerHTML = `
         <div class="fullBox">
           <div class="fullSub">
-            Full view with boxed section headers. ✅ Blank lines are preserved permanently.<br>
-            Tip: Tap a section and use the rhyme dock to insert words.
+            Paste + edit here. Rhymes follow the last word on the line ABOVE your cursor.<br>
+            ✅ Blank lines are just spacing (they do NOT create empty bars).<br>
+            Headings: ${FULL_HEADINGS.join(", ")}
           </div>
-          <div class="fullGrid">
-            ${sectionsHtml}
-          </div>
+          <textarea id="fullEditor" class="fullEditor" spellcheck="false">${escapeHtml(fullText)}</textarea>
         </div>
       `;
 
-      if (!document.getElementById("fullBoxCSS")) {
-        const st = document.createElement("style");
-        st.id = "fullBoxCSS";
-        st.textContent = `
-          .fullGrid{ display:flex; flex-direction:column; gap:12px; max-width:100%; }
-          .fullSection{
-            border:1px solid rgba(0,0,0,.12);
-            border-radius:18px;
-            padding:10px;
-            box-shadow: 0 10px 24px rgba(0,0,0,.06);
-            background:#fff;
-            max-width:100%;
-            min-width:0;
-          }
-          .fullHeaderBox{
-            display:inline-flex;
-            align-items:center;
-            justify-content:center;
-            padding:8px 12px;
-            border-radius:14px;
-            border:2px solid rgba(0,0,0,.12);
-            background: rgba(0,0,0,.06);
-            font-weight:1000;
-            letter-spacing:.8px;
-            font-size:12px;
-            margin-bottom:8px;
-            user-select:none;
-            max-width:100%;
-          }
-          .fullSection .fullEditor{
-            height:220px;
-            min-height:160px;
-            background:#fff;
-            width:100%;
-            max-width:100%;
-          }
-          body.fullMode .fullSection .fullEditor{ height:260px; }
-        `;
-        document.head.appendChild(st);
-      }
+      const ta = document.getElementById("fullEditor");
+      let tmr = null;
 
-      const editors = Array.from(els.bars.querySelectorAll("textarea.fullEditor"));
-      const tmrByKey = new Map();
+      const commit = () => applyFullTextToProject(p, ta.value || "");
+      const refresh = () => { updateRhymesFromFullCaret(ta); updateDockForKeyboard(); };
 
-      function bindEditor(ta) {
-        const key = ta.getAttribute("data-fullkey");
-        if (!key) return;
+      refresh();
 
-        const commit = () => applySectionTextToProject(p, key, ta.value || "");
-        const refresh = () => { updateRhymesFromFullBoxes(ta); updateDockForKeyboard(); };
+      ta.addEventListener("input", () => {
+        if (tmr) clearTimeout(tmr);
+        tmr = setTimeout(commit, 220);
+        refresh();
+      });
+      ta.addEventListener("click", refresh);
+      ta.addEventListener("keyup", refresh);
+      ta.addEventListener("focus", refresh);
 
-        ta.addEventListener("focus", () => { setLastTypingTarget(ta); refresh(); });
-        ta.addEventListener("click", refresh);
-        ta.addEventListener("keyup", refresh);
-
-        ta.addEventListener("input", () => {
-          setLastTypingTarget(ta);
-          if (tmrByKey.get(key)) clearTimeout(tmrByKey.get(key));
-          tmrByKey.set(key, setTimeout(commit, 220));
-          refresh();
-        });
-      }
-
-      editors.forEach(bindEditor);
-      updateRhymes("");
-      updateDockForKeyboard();
       return;
     }
 
@@ -1501,7 +1408,6 @@
 
       ta.addEventListener("focus", () => {
         focusedBarIdx = idx;
-        setLastTypingTarget(ta);
         refreshRhymesForCaret();
         updateDockForKeyboard();
       });
@@ -1511,9 +1417,6 @@
       ta.addEventListener("input", (e) => {
         const text = e.target.value;
         bar.text = text;
-
-        updateFullTextLineForBar(sec, idx, text);
-
         touchProject(p);
 
         const newN = countSyllablesLine(text);
@@ -1524,7 +1427,9 @@
 
         const modeNow = p.autoSplitMode || "syllables";
         const b = computeBeats(text, modeNow);
-        for (let i = 0; i < 4; i++) beatEls[i].innerHTML = escapeHtml(b[i] || "");
+        for (let i = 0; i < 4; i++) {
+          beatEls[i].innerHTML = escapeHtml(b[i] || "");
+        }
 
         refreshRhymesForCaret();
       });
@@ -1573,20 +1478,20 @@
     showToast("New project");
   });
 
-  els.projectName?.addEventListener("input", (e) => {
+  els.projectName.addEventListener("input", (e) => {
     const p = getActiveProject();
     p.name = e.target.value || "";
     touchProject(p);
     renderProjectList();
   });
 
-  els.saveBtn?.addEventListener("click", () => {
+  els.saveBtn.addEventListener("click", () => {
     const p = getActiveProject();
     touchProject(p);
     showToast("Saved");
   });
 
-  els.exportBtn?.addEventListener("click", async () => {
+  els.exportBtn.addEventListener("click", async () => {
     const p = getActiveProject();
     const lines = [];
     lines.push(`${p.name || "Beat Sheet Pro Export"}`);
@@ -1596,7 +1501,7 @@
     for (const s of SECTION_DEFS) {
       const sec = p.sections[s.key];
       lines.push(`[${s.title}]`);
-      sec.bars.forEach(b => { if (b.text && b.text.trim()) lines.push(b.text.trim()); });
+      sec.bars.forEach((b) => { if (b.text && b.text.trim()) lines.push(b.text.trim()); });
       lines.push("");
     }
 
@@ -1609,6 +1514,7 @@
         return;
       }
     } catch {}
+
     try {
       await navigator.clipboard.writeText(out);
       showToast("Copied");
@@ -1617,14 +1523,14 @@
     }
   });
 
-  els.projectSort?.addEventListener("change", () => {
+  els.projectSort.addEventListener("change", () => {
     store.projectSort = els.projectSort.value || "recent";
     saveStore();
     renderProjectList();
     showToast("Sorted");
   });
 
-  els.bpm?.addEventListener("change", () => {
+  els.bpm.addEventListener("change", () => {
     const p = getActiveProject();
     p.bpm = clampInt(parseInt(els.bpm.value, 10), 40, 240);
     els.bpm.value = p.bpm;
@@ -1632,13 +1538,13 @@
     if (metroOn) startMetronome();
   });
 
-  els.highlightMode?.addEventListener("change", () => {
+  els.highlightMode.addEventListener("change", () => {
     const p = getActiveProject();
     p.highlightMode = els.highlightMode.value;
     touchProject(p);
   });
 
-  els.autoSplitMode?.addEventListener("change", () => {
+  els.autoSplitMode.addEventListener("change", () => {
     const p = getActiveProject();
     p.autoSplitMode = els.autoSplitMode.value;
     touchProject(p);
@@ -1646,12 +1552,12 @@
     showToast("Split mode");
   });
 
-  els.metroBtn?.addEventListener("click", () => {
+  els.metroBtn.addEventListener("click", () => {
     if (metroOn) stopMetronome();
     else startMetronome();
   });
 
-  els.recordBtn?.addEventListener("click", async () => {
+  els.recordBtn.addEventListener("click", async () => {
     try {
       if (!recording) await startRecording();
       else stopRecording();
@@ -1667,5 +1573,5 @@
 
   renderAll();
   updateRhymes("");
-
 })();
+```0
