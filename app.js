@@ -11,7 +11,7 @@
    Result: Main + Shared DO NOT share projects/recordings anymore.
   */
 
-  const APP_VERSION = "v20260210_8_FIX_BLANK_BARS";
+  const APP_VERSION = "v20260210_9_SCROLL_SECTIONS";
 
   const need = (id) => document.getElementById(id);
   const els = {
@@ -129,10 +129,9 @@
       .join("\n");
   }
 
-  // ✅ NEW: treat whitespace-only (including NBSP / zero-width) as blank
+  // ✅ treat whitespace-only (including NBSP / zero-width) as blank
   function isBlankLine(line) {
     const s = String(line ?? "");
-    // remove: normal whitespace + NBSP + zero-width + BOM
     const cleaned = s.replace(/[\s\u00A0\u200B\u200C\u200D\uFEFF]+/g, "");
     return cleaned.length === 0;
   }
@@ -546,9 +545,7 @@
       sections[s.key] = {
         key: s.key,
         title: s.title,
-        // bars drive the Verse/Chorus tabs (fixed count)
         bars: Array.from({ length: s.bars + s.extra }, () => ({ text: "" })),
-        // ✅ fullText preserves FULL view formatting + blank lines (unlimited)
         fullText: ""
       };
     }
@@ -561,7 +558,7 @@
       name: name || "",
       createdAt: nowISO(),
       updatedAt: nowISO(),
-      activeSection: "verse1",
+      activeSection: "verse1", // NOTE: now used mainly for tab highlight / jump + "full" mode toggle
       bpm: 95,
       highlightMode: "focused",
       autoSplitMode: "syllables",
@@ -587,19 +584,17 @@
 
   let store = loadStore();
 
-  // ✅ helpers to keep fullText and bars in sync
+  // keep fullText and bars in sync
   function ensureSectionFullText(sec) {
     if (!sec) return;
     if (typeof sec.fullText === "string" && sec.fullText.length) return;
 
-    // If fullText missing (older projects), create from non-empty bars
     const lines = (sec.bars || [])
       .map(b => String(b?.text ?? "").replace(/\s+$/g, ""))
       .filter(l => !isBlankLine(l));
     sec.fullText = lines.join("\n");
   }
 
-  // ✅ FIX: only treat TRUE text lines as bars (ignore whitespace-only lines)
   function syncBarsFromFullText(sec) {
     if (!sec?.bars) return;
 
@@ -615,7 +610,6 @@
     }
   }
 
-  // ✅ FIX: when appending, do NOT auto-insert an extra blank line (prevents “ghost bars”)
   function updateFullTextLineForBar(sec, barIndex, newText) {
     if (!sec) return;
     ensureSectionFullText(sec);
@@ -626,7 +620,6 @@
       if (!isBlankLine(rawLines[i])) nonEmptyIdx.push(i);
     }
 
-    // If there is no fullText yet but bars exist, fallback populate it
     if (!rawLines.length && (sec.bars?.length)) {
       const fallback = (sec.bars || [])
         .map(b => String(b?.text ?? "").replace(/\s+$/g, ""))
@@ -641,11 +634,9 @@
     if (barIndex < nonEmptyIdx.length) {
       rawLines[nonEmptyIdx[barIndex]] = line;
     } else {
-      // append directly (no forced blank spacer)
       rawLines.push(line);
     }
 
-    // Trim ONLY trailing blank lines at the very end
     let end = rawLines.length;
     while (end > 0 && isBlankLine(rawLines[end - 1])) end--;
     sec.fullText = rawLines.slice(0, end).join("\n");
@@ -778,6 +769,7 @@
     noise.stop(t + 0.04);
   }
 
+  // focused bar is now a GLOBAL index across the whole scroll list
   let focusedBarIdx = 0;
 
   function flashBeats(beatInBar) {
@@ -1218,6 +1210,45 @@
     updateRhymes("");
   }
 
+  // ---------- NEW: section header + scroll helpers ----------
+  function ensureScrollCSSOnce() {
+    if (document.getElementById("scrollSectionCSS")) return;
+    const st = document.createElement("style");
+    st.id = "scrollSectionCSS";
+    st.textContent = `
+      .secWrap{ margin: 10px 0 14px 0; }
+      .secHeaderRow{ display:flex; align-items:center; gap:10px; margin: 0 0 8px 0; }
+      .secHeaderBox{
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        padding:10px 14px;
+        border-radius:16px;
+        border:2px solid rgba(0,0,0,.12);
+        background: rgba(0,0,0,.06);
+        font-weight:1000;
+        letter-spacing:.9px;
+        font-size:13px;
+        user-select:none;
+      }
+      .secDivider{
+        height: 2px;
+        flex: 1;
+        border-radius: 999px;
+        background: rgba(0,0,0,.08);
+      }
+    `;
+    document.head.appendChild(st);
+  }
+
+  function scrollToSection(key) {
+    const el = document.getElementById(`sec-${key}`);
+    if (!el) return;
+    // scroll so header is visible below sticky top UI
+    const y = el.getBoundingClientRect().top + window.scrollY - 120;
+    window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
+  }
+
   // ---------- rendering ----------
   function renderProjectList() {
     const sort = store.projectSort || "recent";
@@ -1301,9 +1332,17 @@
       btn.className = "tab" + (p.activeSection === s.key ? " active" : "");
       btn.textContent = s.title;
       btn.addEventListener("click", () => {
+        // ✅ keep active styling + allow jumping, but rendering is now one continuous scroll
         p.activeSection = s.key;
         touchProject(p);
-        renderAll();
+
+        // if user was in Full mode, exit Full into scroll view first
+        if (document.body.classList.contains("fullMode")) {
+          renderAll();
+          setTimeout(() => scrollToSection(s.key), 50);
+        } else {
+          scrollToSection(s.key);
+        }
       });
       els.sectionTabs.appendChild(btn);
     }
@@ -1316,6 +1355,7 @@
       p.activeSection = "full";
       touchProject(p);
       renderAll();
+      window.scrollTo({ top: 0, behavior: "smooth" });
     });
     els.sectionTabs.appendChild(fullBtn);
   }
@@ -1411,104 +1451,176 @@
       return;
     }
 
-    const sec = p.sections[p.activeSection];
+    // ✅ OLD BEHAVIOR: one continuous scroll containing ALL sections, with standout headers
+    ensureScrollCSSOnce();
     els.bars.innerHTML = "";
 
-    sec.bars.forEach((bar, idx) => {
-      const wrap = document.createElement("div");
-      wrap.className = "bar";
+    // We'll use FULL_ORDER for display order
+    const order = FULL_ORDER.slice();
 
-      const n = countSyllablesLine(bar.text || "");
-      const glow = syllGlowClass(n);
-      const beats = computeBeats(bar.text || "", p.autoSplitMode || "syllables");
+    // helper: find previous non-empty bar text across sections
+    function getPrevNonEmptyBarText(sectionKey, barIdx) {
+      const modeNow = p.autoSplitMode || "syllables";
 
-      wrap.innerHTML = `
-        <div class="barTop">
-          <div class="barLeft">
-            <div class="barNum">${idx + 1}</div>
-            <div class="syllPill ${glow}">
-              <span class="lbl">Syllables</span>
-              <span class="val" data-syll="${idx}">${n ? n : ""}</span>
-            </div>
-          </div>
-        </div>
+      const sec = p.sections[sectionKey];
+      if (!sec) return "";
 
-        <textarea data-idx="${idx}" placeholder="Type your bar. Optional: use / for beat breaks.">${escapeHtml(bar.text || "")}</textarea>
-
-        <div class="beats">
-          <div class="beat">${escapeHtml(beats[0] || "")}</div>
-          <div class="beat snare">${escapeHtml(beats[1] || "")}</div>
-          <div class="beat">${escapeHtml(beats[2] || "")}</div>
-          <div class="beat snare">${escapeHtml(beats[3] || "")}</div>
-        </div>
-      `;
-
-      const ta = wrap.querySelector("textarea");
-      const syllVal = wrap.querySelector(`[data-syll="${idx}"]`);
-      const syllPill = wrap.querySelector(".syllPill");
-      const beatEls = wrap.querySelectorAll(".beat");
-
-      function refreshRhymesForCaret() {
-        const text = ta.value || "";
-        const caret = ta.selectionStart || 0;
-        const beatIdx = caretBeatIndex(text, caret);
-        const modeNow = p.autoSplitMode || "syllables";
-        const b = computeBeats(text, modeNow);
-
-        let prevText = "";
-        if (beatIdx > 0) {
-          prevText = b[beatIdx - 1] || "";
-        } else {
-          const prevBar = sec.bars[idx - 1];
-          if (prevBar && prevBar.text) {
-            const pb = computeBeats(prevBar.text, modeNow);
-            prevText = pb[3] || pb[2] || pb[1] || pb[0] || "";
-          }
+      // within same section, previous bar
+      if (barIdx > 0) {
+        const prevBar = sec.bars[barIdx - 1];
+        if (prevBar && prevBar.text && !isBlankLine(prevBar.text)) {
+          const pb = computeBeats(prevBar.text, modeNow);
+          return pb[3] || pb[2] || pb[1] || pb[0] || "";
         }
-        updateRhymes(lastWord(prevText));
       }
 
-      ta.addEventListener("focus", () => {
-        focusedBarIdx = idx;
-        setLastTypingTarget(ta);
-        refreshRhymesForCaret();
-        updateDockForKeyboard();
-      });
-      ta.addEventListener("click", refreshRhymesForCaret);
-      ta.addEventListener("keyup", refreshRhymesForCaret);
-
-      ta.addEventListener("input", (e) => {
-        const text = e.target.value;
-        bar.text = text;
-
-        // ✅ keep Full view in sync but never create “blank bars”
-        updateFullTextLineForBar(sec, idx, text);
-
-        touchProject(p);
-
-        const newN = countSyllablesLine(text);
-        syllVal.textContent = newN ? String(newN) : "";
-        syllPill.classList.remove("red", "yellow", "green");
-        const g = syllGlowClass(newN);
-        if (g) syllPill.classList.add(g);
-
-        const modeNow = p.autoSplitMode || "syllables";
-        const b = computeBeats(text, modeNow);
-        for (let i = 0; i < 4; i++) beatEls[i].innerHTML = escapeHtml(b[i] || "");
-
-        refreshRhymesForCaret();
-      });
-
-      ta.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          const next = els.bars.querySelector(`textarea[data-idx="${idx + 1}"]`);
-          if (next) next.focus();
+      // otherwise, walk backward through prior sections
+      const si = order.indexOf(sectionKey);
+      for (let s = si - 1; s >= 0; s--) {
+        const pk = order[s];
+        const ps = p.sections[pk];
+        if (!ps?.bars) continue;
+        for (let i = ps.bars.length - 1; i >= 0; i--) {
+          const t = ps.bars[i]?.text || "";
+          if (!isBlankLine(t)) {
+            const pb = computeBeats(t, modeNow);
+            return pb[3] || pb[2] || pb[1] || pb[0] || "";
+          }
         }
+      }
+
+      return "";
+    }
+
+    // build DOM
+    let globalBarCounter = 0;
+
+    for (const sectionKey of order) {
+      const sec = p.sections[sectionKey];
+      if (!sec?.bars) continue;
+
+      const wrapSec = document.createElement("div");
+      wrapSec.className = "secWrap";
+      wrapSec.id = `sec-${sectionKey}`;
+
+      const headerRow = document.createElement("div");
+      headerRow.className = "secHeaderRow";
+
+      const header = document.createElement("div");
+      header.className = "secHeaderBox";
+      header.textContent = (getSectionTitle(sectionKey) || sectionKey).toUpperCase();
+
+      const divider = document.createElement("div");
+      divider.className = "secDivider";
+
+      headerRow.appendChild(header);
+      headerRow.appendChild(divider);
+
+      wrapSec.appendChild(headerRow);
+
+      sec.bars.forEach((bar, idx) => {
+        const wrap = document.createElement("div");
+        wrap.className = "bar";
+
+        const n = countSyllablesLine(bar.text || "");
+        const glow = syllGlowClass(n);
+        const beats = computeBeats(bar.text || "", p.autoSplitMode || "syllables");
+
+        wrap.innerHTML = `
+          <div class="barTop">
+            <div class="barLeft">
+              <div class="barNum">${idx + 1}</div>
+              <div class="syllPill ${glow}">
+                <span class="lbl">Syllables</span>
+                <span class="val" data-syll="${idx}">${n ? n : ""}</span>
+              </div>
+            </div>
+          </div>
+
+          <textarea data-sec="${escapeHtml(sectionKey)}" data-idx="${idx}" placeholder="Type your bar. Optional: use / for beat breaks.">${escapeHtml(bar.text || "")}</textarea>
+
+          <div class="beats">
+            <div class="beat">${escapeHtml(beats[0] || "")}</div>
+            <div class="beat snare">${escapeHtml(beats[1] || "")}</div>
+            <div class="beat">${escapeHtml(beats[2] || "")}</div>
+            <div class="beat snare">${escapeHtml(beats[3] || "")}</div>
+          </div>
+        `;
+
+        const ta = wrap.querySelector("textarea");
+        const syllVal = wrap.querySelector(`[data-syll="${idx}"]`);
+        const syllPill = wrap.querySelector(".syllPill");
+        const beatEls = wrap.querySelectorAll(".beat");
+
+        const thisGlobalIndex = globalBarCounter;
+
+        function refreshRhymesForCaret() {
+          const text = ta.value || "";
+          const caret = ta.selectionStart || 0;
+          const beatIdx = caretBeatIndex(text, caret);
+          const modeNow = p.autoSplitMode || "syllables";
+          const b = computeBeats(text, modeNow);
+
+          let prevText = "";
+          if (beatIdx > 0) {
+            prevText = b[beatIdx - 1] || "";
+          } else {
+            prevText = getPrevNonEmptyBarText(sectionKey, idx);
+          }
+          updateRhymes(lastWord(prevText));
+        }
+
+        ta.addEventListener("focus", () => {
+          focusedBarIdx = thisGlobalIndex;
+          setLastTypingTarget(ta);
+          refreshRhymesForCaret();
+          updateDockForKeyboard();
+        });
+        ta.addEventListener("click", refreshRhymesForCaret);
+        ta.addEventListener("keyup", refreshRhymesForCaret);
+
+        ta.addEventListener("input", (e) => {
+          const text = e.target.value;
+          bar.text = text;
+
+          // keep Full view in sync, but never create “blank bars”
+          updateFullTextLineForBar(sec, idx, text);
+
+          touchProject(p);
+
+          const newN = countSyllablesLine(text);
+          syllVal.textContent = newN ? String(newN) : "";
+          syllPill.classList.remove("red", "yellow", "green");
+          const g = syllGlowClass(newN);
+          if (g) syllPill.classList.add(g);
+
+          const modeNow = p.autoSplitMode || "syllables";
+          const b = computeBeats(text, modeNow);
+          for (let i = 0; i < 4; i++) beatEls[i].innerHTML = escapeHtml(b[i] || "");
+
+          refreshRhymesForCaret();
+        });
+
+        ta.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            // jump to the next textarea in the whole scroll
+            const all = Array.from(els.bars.querySelectorAll("textarea[data-sec][data-idx]"));
+            const here = all.indexOf(ta);
+            const next = all[here + 1];
+            if (next) next.focus();
+          }
+        });
+
+        wrapSec.appendChild(wrap);
+        globalBarCounter++;
       });
 
-      els.bars.appendChild(wrap);
-    });
+      els.bars.appendChild(wrapSec);
+    }
+
+    updateRhymes("");
+    updateDockForKeyboard();
   }
 
   function renderAll() {
@@ -1639,3 +1751,4 @@
   updateRhymes("");
 
 })();
+```0
