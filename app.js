@@ -12,7 +12,7 @@
  * Result: Main + Shared DO NOT share projects/recordings anymore.
  */
 
-const APP_VERSION = "v20260210_5_FULLBOX";
+const APP_VERSION = "v20260210_6_FULLBOX_SPACES";
 const need = (id) => document.getElementById(id);
 const els = {
   exportBtn: need("exportBtn"),
@@ -1095,7 +1095,7 @@ function renderRecordings(){
   }
 }
 
-// ---------- FULL editor (NEW boxed headers) ----------
+// ---------- FULL editor (boxed headers + PRESERVE BLANK LINES) ----------
 function getSectionTitle(key){
   return (SECTION_DEFS.find(s=>s.key===key)?.title || key);
 }
@@ -1103,12 +1103,21 @@ function getSectionTitle(key){
 function buildSectionText(p, key){
   const sec = p.sections[key];
   if(!sec?.bars) return "";
-  // only include non-empty lines (keeps behavior similar to old "full" which ignored blanks for bars)
+
+  // ✅ Preserve blank lines INSIDE the section:
+  // - show bars from 0..last non-empty bar
+  // - include empty bars as empty lines
+  let lastNonEmpty = -1;
+  for(let i=0;i<sec.bars.length;i++){
+    const t = (sec.bars[i]?.text ?? "");
+    if(String(t).trim().length) lastNonEmpty = i;
+  }
+  if(lastNonEmpty < 0) return "";
+
   const lines = [];
-  for(const b of sec.bars){
-    const t = (b.text || "").replace(/\s+$/,"");
-    if(!t.trim()) continue;
-    lines.push(t);
+  for(let i=0;i<=lastNonEmpty;i++){
+    const t = String(sec.bars[i]?.text ?? "").replace(/\s+$/,""); // trim right only
+    lines.push(t); // may be "" -> keeps a blank line in the textarea
   }
   return lines.join("\n");
 }
@@ -1120,13 +1129,20 @@ function applySectionTextToProject(p, key, text){
   // clear existing
   sec.bars.forEach(b => b.text = "");
 
-  const lines = String(text||"").replace(/\r/g,"").split("\n")
-    .map(l => l.replace(/\s+$/,""))
-    .filter(l => l.trim().length); // ignore blank lines like old full mode
+  // ✅ Preserve blank lines by mapping each textarea line to a bar (empty line => empty bar)
+  const lines = String(text||"").replace(/\r/g,"").split("\n").map(l => l.replace(/\s+$/,""));
 
-  for(let i=0;i<Math.min(lines.length, sec.bars.length); i++){
-    sec.bars[i].text = lines[i];
+  // optional: trim *trailing* blank lines so you don't burn bars at the end
+  let end = lines.length;
+  while(end > 0 && !String(lines[end-1] ?? "").trim()){
+    end--;
   }
+
+  for(let i=0;i<Math.min(end, sec.bars.length); i++){
+    const line = lines[i] ?? "";
+    sec.bars[i].text = String(line).trim() ? line : ""; // blank stays blank
+  }
+
   touchProject(p);
 }
 
@@ -1272,7 +1288,7 @@ function renderTabs(){
 function renderBars(){
   const p = getActiveProject();
 
-  // ✅ FULL MODE now shows boxed headers + one editor per section
+  // ✅ FULL MODE shows boxed headers + one editor per section
   if(p.activeSection === "full"){
     const sectionsHtml = FULL_ORDER.map((key)=>{
       const title = getSectionTitle(key).toUpperCase();
@@ -1288,7 +1304,7 @@ function renderBars(){
     els.bars.innerHTML = `
       <div class="fullBox">
         <div class="fullSub">
-          Full view with boxed section headers. Blank lines are just spacing (they do NOT create empty bars).<br>
+          Full view with boxed section headers. ✅ Blank lines are preserved in Full view.<br>
           Tip: Tap a section and use the rhyme dock to insert words.
         </div>
         <div class="fullGrid">
