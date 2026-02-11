@@ -4,7 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Beat Sheet Pro</title>
-<link rel="manifest" href="./manifest.webmanifest?v=20260210_4">
+
+  <!-- manifest href will be replaced at runtime with an absolute /<repo>/manifest.webmanifest -->
+  <link id="appManifest" rel="manifest" href="./manifest.webmanifest?v=BOOT">
 
   <style>
     :root{
@@ -29,7 +31,7 @@
       font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
       background:var(--bg);
       color:#111;
-      padding-bottom: 110px; /* room for rhyme dock */
+      padding-bottom: 110px;
     }
 
     header{
@@ -44,11 +46,9 @@
       -webkit-overflow-scrolling: touch;
     }
 
-    /* ✅ Only on FULL tab: shorter header + hide recordings card */
     body.fullMode header{ max-height:14vh; }
     body.fullMode .miniCard{ display:none; }
 
-    /* ✅ Header collapse mode: show ONLY metronome + record */
     body.headerCollapsed header{
       max-height:none;
       overflow:hidden;
@@ -60,12 +60,8 @@
     body.headerCollapsed .miniCard{
       display:none !important;
     }
-    body.headerCollapsed .stickyTools{
-      margin-top:0;
-    }
-    body.headerCollapsed .headerToggleRow{
-      display:flex;
-    }
+    body.headerCollapsed .stickyTools{ margin-top:0; }
+    body.headerCollapsed .headerToggleRow{ display:flex; }
 
     .titleRow{
       display:flex;
@@ -112,7 +108,6 @@
       gap:8px;
       padding:9px 11px;
     }
-
     .pill label{
       font-size:10px;
       color:var(--muted);
@@ -121,67 +116,60 @@
       letter-spacing:.6px;
       line-height:1;
     }
-
     input[type="number"]{
       width:88px;
       font-weight:1000;
-      padding-right:11px; /* ✅ normal again (no head in the pill) */
+      padding-right:11px;
     }
 
-    /* ✅ NEW: headshot lives in the gray area, not inside BPM pill */
     .headshotSlot{
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  flex:1 1 auto;
-  min-width:72px;
-}
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      flex:1 1 auto;
+      min-width:72px;
+    }
+    .headshotWrap{
+      position:relative;
+      width:64px;
+      height:64px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      pointer-events:none;
+    }
+    .bpmHeadshot{
+      width:64px;
+      height:64px;
+      object-fit:contain;
+      border-radius:16px;
+      background:transparent;
+      border:0;
+      box-shadow:none;
+      pointer-events:none;
+    }
 
-/* headshot container so we can overlay eye dots */
-.headshotWrap{
-  position:relative;
-  width:64px;
-  height:64px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  pointer-events:none;
-}
+    .eyeDot{
+      position:absolute;
+      width:10px;
+      height:10px;
+      border-radius:999px;
+      background: rgba(255, 43, 43, 0);
+      opacity:0;
+      transform: scale(.7);
+      transition: opacity .05s linear, transform .05s linear;
+      pointer-events:none;
+      top: 14px;
+    }
+    .eyeDot.left{ left: 21px; }
+    .eyeDot.right{ left: 36px; }
+    .eyeDot.on{
+      opacity:1;
+      background: var(--red);
+      transform: scale(1);
+      box-shadow: 0 0 10px 4px rgba(255, 43, 43, .55);
+    }
 
-.bpmHeadshot{
-  width:64px;
-  height:64px;
-  object-fit:contain;
-  border-radius:16px;
-  background:transparent;
-  border:0;
-  box-shadow:none;
-  pointer-events:none;
-}
-
-/* red blinking "eyes" overlay (tuned for 64x64 image) */
-.eyeDot{
-  position:absolute;
-  width:10px;
-  height:10px;
-  border-radius:999px;
-  background: rgba(255, 43, 43, 0);
-  opacity:0;
-  transform: scale(.7);
-  transition: opacity .05s linear, transform .05s linear;
-  pointer-events:none;
-  top: 14px; /* adjust if eyes sit higher/lower */
-}
-
-.eyeDot.left{ left: 21px; }   /* adjust if needed */
-.eyeDot.right{ left: 36px; }  /* adjust if needed */
-
-.eyeDot.on{
-  opacity:1;
-  background: var(--red);
-  transform: scale(1);
-  box-shadow: 0 0 10px 4px rgba(255, 43, 43, .55);
-}
     .tabs{
       display:flex;
       gap:8px;
@@ -213,7 +201,6 @@
       gap:10px;
       align-items:stretch;
     }
-
     .metroBtn{
       display:flex; align-items:center; justify-content:center;
       font-weight:1000; border-radius:16px;
@@ -222,7 +209,6 @@
       padding:10px 14px; min-height:64px;
     }
     .metroBtn.on{ background:#111; color:#fff; border-color:#111; }
-
     .recordBtn{
       display:flex; align-items:center; justify-content:center;
       font-weight:1000; border-radius:16px;
@@ -244,7 +230,6 @@
       min-width:0;
       margin-top:10px;
     }
-
     .miniTop{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
     .miniTitle{
       font-size:11px; font-weight:1000; color:var(--muted);
@@ -264,7 +249,6 @@
     }
 
     main{ padding:10px 10px 26px; }
-
     .panel{
       background:var(--card);
       border:1px solid var(--stroke);
@@ -273,146 +257,7 @@
       box-shadow:var(--shadow);
       margin-bottom:10px;
     }
-
     #bars{ display:flex; flex-direction:column; gap:10px; }
-
-    .bar{
-      background:var(--card);
-      border:1px solid var(--stroke);
-      border-radius:18px;
-      padding:10px;
-      box-shadow:var(--shadow);
-    }
-
-    .barTop{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      margin-bottom:8px;
-      gap:10px;
-    }
-    .barLeft{
-      display:flex;
-      align-items:center;
-      gap:10px;
-      min-width:0;
-    }
-    .barNum{
-      width:34px;
-      height:34px;
-      border-radius:12px;
-      border:1px solid rgba(0,0,0,.14);
-      background:#fff;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      font-weight:1000;
-      flex:0 0 auto;
-    }
-    .syllPill{
-      display:flex;
-      align-items:center;
-      gap:10px;
-      padding:8px 12px;
-      border-radius:999px;
-      border:2px solid rgba(0,0,0,.12);
-      background:#fff;
-      font-weight:1000;
-      min-width:160px;
-      flex:0 0 auto;
-    }
-    .syllPill .lbl{
-      font-size:10px;
-      color:rgba(0,0,0,.55);
-      text-transform:uppercase;
-      letter-spacing:.7px;
-    }
-    .syllPill .val{ font-size:16px; }
-
-    .syllPill.green{
-      border-color: rgba(53, 208, 127, .9);
-      box-shadow: 0 0 0 4px rgba(53, 208, 127, .20);
-    }
-    .syllPill.yellow{
-      border-color: rgba(255, 213, 74, .95);
-      box-shadow: 0 0 0 4px rgba(255, 213, 74, .22);
-    }
-    .syllPill.red{
-      border-color: rgba(255, 43, 43, .9);
-      box-shadow: 0 0 0 4px rgba(255, 43, 43, .18);
-    }
-
-    textarea{
-      width:100%;
-      min-height:96px;
-      resize:vertical;
-      padding:12px;
-      border-radius:16px;
-      border:1px solid rgba(0,0,0,.18);
-      background:var(--green);
-      font-size:18px;
-      line-height:1.25;
-      font-weight:900;
-      outline:none;
-    }
-
-    .beats{
-      margin-top:10px;
-      display:grid;
-      grid-template-columns:repeat(4,1fr);
-      gap:10px;
-    }
-    .beat{
-      min-height:70px;
-      border-radius:16px;
-      border:1px solid rgba(0,0,0,.14);
-      background:#fff;
-      padding:10px;
-      font-weight:1000;
-      overflow-wrap:anywhere;
-    }
-    .beat.snare{ background:var(--snare); }
-    .beat.flash{
-      background:var(--hl) !important;
-      box-shadow:0 0 0 4px rgba(255,230,106,.45);
-    }
-
-    .fullBox{
-      background:#fff;
-      border:1px solid var(--stroke);
-      border-radius:18px;
-      padding:12px;
-      box-shadow:var(--shadow);
-      font-weight:900;
-      line-height:1.35;
-      font-size:15px;
-    }
-    .fullSub{
-      color:var(--muted);
-      font-weight:1000;
-      font-size:12px;
-      margin-bottom:8px;
-    }
-
-    .fullEditor{
-      width:100%;
-      height:70vh;
-      min-height:420px;
-      resize:vertical;
-      padding:12px;
-      border-radius:16px;
-      border:1px solid rgba(0,0,0,.18);
-      background:#fff;
-      font-size:16px;
-      line-height:1.35;
-      font-weight:900;
-      outline:none;
-      white-space:pre-wrap;
-    }
-    body.fullMode .fullEditor{
-      height:76vh;
-      min-height:520px;
-    }
 
     .toast{
       position:fixed;
@@ -431,75 +276,6 @@
     }
     .toast.show{ opacity:1; }
 
-    .audioItem{
-      display:flex;
-      gap:10px;
-      align-items:center;
-      justify-content:space-between;
-      flex-wrap:wrap;
-      margin-top:8px;
-    }
-    .audioLabel{
-      font-weight:1000;
-      flex:1;
-      min-width:150px;
-      overflow:hidden;
-      text-overflow:ellipsis;
-      white-space:nowrap;
-    }
-
-    /* ✅ circular icon buttons */
-    .iconRow{
-      display:flex;
-      gap:8px;
-      align-items:center;
-      flex:0 0 auto;
-    }
-    .iconBtn{
-      width:38px;
-      height:38px;
-      padding:0;
-      border-radius:999px;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      font-size:16px;
-      font-weight:1000;
-      line-height:1;
-      box-shadow:0 6px 14px rgba(0,0,0,.08);
-    }
-    .iconBtn.play{
-      border-color: rgba(53, 208, 127, .65);
-      background: rgba(53, 208, 127, .18);
-      color:#0f5132;
-    }
-    .iconBtn.stop{
-      border-color: rgba(0,0,0,.35);
-      background: rgba(0,0,0,.08);
-      color:#111;
-    }
-    .iconBtn.delete{
-      border-color: rgba(255, 43, 43, .55);
-      background: rgba(255, 43, 43, .12);
-      color:#7f1d1d;
-    }
-
-    /* ✅ header collapse toggle row */
-    .headerToggleRow{
-      display:none;
-      align-items:center;
-      justify-content:flex-end;
-      margin-bottom:8px;
-    }
-    .headerToggleBtn{
-      padding:6px 10px;
-      border-radius:999px;
-      font-size:12px;
-      font-weight:1000;
-      box-shadow:0 4px 10px rgba(0,0,0,.04);
-      white-space:nowrap;
-    }
-
     .rhymeDock{
       position:fixed;
       left:10px;
@@ -514,7 +290,7 @@
       transform: translateZ(0);
     }
 
-    /* ✅ hidden dock -> circle bottom-right */
+    /* hidden dock -> circle bottom-right */
     .rhymeDock.dockHidden{
       left:auto !important;
       right:10px !important;
@@ -527,12 +303,8 @@
       justify-content:center;
     }
     .rhymeDock.dockHidden .dockTitle,
-    .rhymeDock.dockHidden .dockBase{
-      display:none !important;
-    }
-    .rhymeDock.dockHidden .rhymeWrap{
-      display:none !important;
-    }
+    .rhymeDock.dockHidden .dockBase{ display:none !important; }
+    .rhymeDock.dockHidden .rhymeWrap{ display:none !important; }
     .rhymeDock.dockHidden .dockTop{
       margin:0 !important;
       width:100%;
@@ -605,6 +377,185 @@
       box-shadow:0 4px 10px rgba(0,0,0,.04);
     }
 
+    /* bar styles (needed so it looks like main) */
+    .bar{
+      background:var(--card);
+      border:1px solid var(--stroke);
+      border-radius:18px;
+      padding:10px;
+      box-shadow:var(--shadow);
+    }
+    .barTop{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      margin-bottom:8px;
+      gap:10px;
+    }
+    .barLeft{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      min-width:0;
+    }
+    .barNum{
+      width:34px;
+      height:34px;
+      border-radius:12px;
+      border:1px solid rgba(0,0,0,.14);
+      background:#fff;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:1000;
+      flex:0 0 auto;
+    }
+    .syllPill{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:8px 12px;
+      border-radius:999px;
+      border:2px solid rgba(0,0,0,.12);
+      background:#fff;
+      font-weight:1000;
+      min-width:160px;
+      flex:0 0 auto;
+    }
+    .syllPill .lbl{
+      font-size:10px;
+      color:rgba(0,0,0,.55);
+      text-transform:uppercase;
+      letter-spacing:.7px;
+    }
+    .syllPill .val{ font-size:16px; }
+    .syllPill.green{ border-color: rgba(53, 208, 127, .9); box-shadow: 0 0 0 4px rgba(53, 208, 127, .20); }
+    .syllPill.yellow{ border-color: rgba(255, 213, 74, .95); box-shadow: 0 0 0 4px rgba(255, 213, 74, .22); }
+    .syllPill.red{ border-color: rgba(255, 43, 43, .9); box-shadow: 0 0 0 4px rgba(255, 43, 43, .18); }
+
+    textarea{
+      width:100%;
+      min-height:96px;
+      resize:vertical;
+      padding:12px;
+      border-radius:16px;
+      border:1px solid rgba(0,0,0,.18);
+      background:var(--green);
+      font-size:18px;
+      line-height:1.25;
+      font-weight:900;
+      outline:none;
+    }
+
+    .beats{
+      margin-top:10px;
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:10px;
+    }
+    .beat{
+      min-height:70px;
+      border-radius:16px;
+      border:1px solid rgba(0,0,0,.14);
+      background:#fff;
+      padding:10px;
+      font-weight:1000;
+      overflow-wrap:anywhere;
+    }
+    .beat.snare{ background:var(--snare); }
+    .beat.flash{
+      background:var(--hl) !important;
+      box-shadow:0 0 0 4px rgba(255,230,106,.45);
+    }
+
+    .fullBox{
+      background:#fff;
+      border:1px solid var(--stroke);
+      border-radius:18px;
+      padding:12px;
+      box-shadow:var(--shadow);
+      font-weight:900;
+      line-height:1.35;
+      font-size:15px;
+    }
+    .fullSub{
+      color:var(--muted);
+      font-weight:1000;
+      font-size:12px;
+      margin-bottom:8px;
+    }
+    .fullEditor{
+      width:100%;
+      height:70vh;
+      min-height:420px;
+      resize:vertical;
+      padding:12px;
+      border-radius:16px;
+      border:1px solid rgba(0,0,0,.18);
+      background:#fff;
+      font-size:16px;
+      line-height:1.35;
+      font-weight:900;
+      outline:none;
+      white-space:pre-wrap;
+    }
+    body.fullMode .fullEditor{ height:76vh; min-height:520px; }
+
+    /* recording list styles */
+    .audioItem{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      justify-content:space-between;
+      flex-wrap:wrap;
+      margin-top:8px;
+    }
+    .audioLabel{
+      font-weight:1000;
+      flex:1;
+      min-width:150px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .iconRow{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      flex:0 0 auto;
+    }
+    .iconBtn{
+      width:38px;
+      height:38px;
+      padding:0;
+      border-radius:999px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:16px;
+      font-weight:1000;
+      line-height:1;
+      box-shadow:0 6px 14px rgba(0,0,0,.08);
+    }
+    .iconBtn.play{ border-color: rgba(53, 208, 127, .65); background: rgba(53, 208, 127, .18); color:#0f5132; }
+    .iconBtn.stop{ border-color: rgba(0,0,0,.35); background: rgba(0,0,0,.08); color:#111; }
+    .iconBtn.delete{ border-color: rgba(255, 43, 43, .55); background: rgba(255, 43, 43, .12); color:#7f1d1d; }
+
+    .headerToggleRow{
+      display:none;
+      align-items:center;
+      justify-content:flex-end;
+      margin-bottom:8px;
+    }
+    .headerToggleBtn{
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:1000;
+      box-shadow:0 4px 10px rgba(0,0,0,.04);
+      white-space:nowrap;
+    }
+
     @media (max-width: 420px){
       .recordBtn, .metroBtn{ min-height:52px; }
     }
@@ -631,13 +582,12 @@
         <input id="bpm" type="number" min="40" max="240" value="95" />
       </div>
 
-      <!-- ✅ NEW: headshot sits in the gray empty space area -->
       <div class="headshotSlot" aria-hidden="true">
-  <div class="headshotWrap">
-    <img class="bpmHeadshot" src="./headshot.png" alt="">
-    <span id="eyeL" class="eyeDot left"></span>
-    <span id="eyeR" class="eyeDot right"></span>
-  </div>
+        <div class="headshotWrap">
+          <img class="bpmHeadshot" src="./headshot.png" alt="">
+          <span id="eyeL" class="eyeDot left"></span>
+          <span id="eyeR" class="eyeDot right"></span>
+        </div>
       </div>
 
       <div class="pill">
@@ -715,6 +665,48 @@
 
   <div class="toast" id="toast">Saved</div>
 
-<script src="./app.js?v=20260210_4"></script>
+  <!-- ✅ Single robust loader (ONLY load once) -->
+  <script>
+  (function(){
+    const repo = (location.pathname.split("/").filter(Boolean)[0] || "");
+    const base = repo ? ("/" + repo) : "";
+    const v = "SHARED_20260210_6"; // << bump when you need to force refresh
+
+    const man = document.getElementById("appManifest");
+    if(man) man.href = base + "/manifest.webmanifest?v=" + encodeURIComponent(v);
+
+    const s = document.createElement("script");
+    s.src = base + "/app.js?v=" + encodeURIComponent(v);
+    s.defer = true;
+    document.body.appendChild(s);
+  })();
+  </script>
+
+  <!-- Optional: show errors on screen (keep for debugging; delete later if you want) -->
+  <script>
+  (function(){
+    function show(msg){
+      let box = document.getElementById("errBox");
+      if(!box){
+        box = document.createElement("div");
+        box.id = "errBox";
+        box.style.cssText =
+          "position:fixed;left:10px;right:10px;top:10px;z-index:99999;" +
+          "background:#111;color:#fff;padding:10px 12px;border-radius:12px;" +
+          "font:12px/1.35 system-ui,Segoe UI,Roboto,Arial;white-space:pre-wrap;" +
+          "max-height:40vh;overflow:auto;opacity:.95";
+        document.body.appendChild(box);
+      }
+      box.textContent = msg;
+    }
+    window.addEventListener("error", (e)=>{
+      show("JS ERROR:\n" + (e.message || "Unknown") + "\n\n" + (e.filename||"") + ":" + (e.lineno||"") + ":" + (e.colno||""));
+    });
+    window.addEventListener("unhandledrejection", (e)=>{
+      const r = e.reason;
+      show("PROMISE ERROR:\n" + (r && (r.stack || r.message) ? (r.stack || r.message) : String(r)));
+    });
+  })();
+  </script>
 </body>
 </html>
