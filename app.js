@@ -1479,9 +1479,8 @@ function renderAll(){
   renderRecordings();
 
   if(els.statusText){
-    els.statusText.textContent = `${APP_VERSION} • Updated ${new Date(p.updatedAt).toLocaleString()}`;
+    els.statusText.textContent = "🔥🎤🔥";
   }
-
   updateDockForKeyboard();
   updateRecordButtonUI();
 
