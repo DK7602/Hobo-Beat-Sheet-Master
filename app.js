@@ -12,7 +12,7 @@
  * Result: Main + Shared DO NOT share projects/recordings anymore.
  */
 
-const APP_VERSION = "v20260210_4";
+const APP_VERSION = "v20260210_5_FULLBOX";
 const need = (id) => document.getElementById(id);
 const els = {
   exportBtn: need("exportBtn"),
@@ -120,17 +120,11 @@ function clampInt(v,min,max){
   if(Number.isNaN(v)) return min;
   return Math.max(min, Math.min(max, v));
 }
+
 // ---------- active typing target (for rhyme insert) ----------
 let lastTypingTarget = null;
-
-function isTextTarget(el){
-  return !!el && el.tagName === "TEXTAREA";
-}
-function setLastTypingTarget(el){
-  if(isTextTarget(el)) lastTypingTarget = el;
-}
-
-// Track the last textarea you touched anywhere in the app
+function isTextTarget(el){ return !!el && el.tagName === "TEXTAREA"; }
+function setLastTypingTarget(el){ if(isTextTarget(el)) lastTypingTarget = el; }
 document.addEventListener("focusin", (e)=>{
   if(isTextTarget(e.target)) setLastTypingTarget(e.target);
 });
@@ -171,6 +165,7 @@ function startEyePulseFromBpm(){
   const intervalMs = 60000 / bpm; // quarter note pulse
   eyePulseTimer = setInterval(()=>flashEyes(), intervalMs);
 }
+
 // ---------- header collapse ----------
 function loadHeaderCollapsed(){
   try{ return localStorage.getItem(HEADER_COLLAPSED_KEY) === "1"; }catch{ return false; }
@@ -183,12 +178,14 @@ function setHeaderCollapsed(isCollapsed){
   if(els.headerToggle)  els.headerToggle.textContent  = isCollapsed ? "Show" : "Hide";
   if(els.headerToggle2) els.headerToggle2.textContent = isCollapsed ? "Show" : "Hide";
   saveHeaderCollapsed(!!isCollapsed);
-  updateDockForKeyboard();// Don't blink when header is hidden
-if(isCollapsed) stopEyePulse();
-else{
-  if(metroOn){} // metronome tick will blink
-  else if(recording) startEyePulseFromBpm();
-}
+  updateDockForKeyboard();
+
+  // Don't blink when header is hidden
+  if(isCollapsed) stopEyePulse();
+  else{
+    if(metroOn){} // metronome tick will blink
+    else if(recording) startEyePulseFromBpm();
+  }
 }
 if(els.headerToggle){
   els.headerToggle.addEventListener("click", ()=>{
@@ -721,7 +718,7 @@ function flashBeats(beatInBar){
 function startMetronome(){
   ensureAudio();
   if(audioCtx.state === "suspended") audioCtx.resume();
-  stopMetronome();stopEyePulse(); // metronome drives the blink, so no separate pulse
+  stopMetronome(); stopEyePulse(); // metronome drives the blink, so no separate pulse
 
   metroOn = true;
   els.metroBtn.textContent = "Stop";
@@ -740,8 +737,8 @@ function startMetronome(){
     if(step16 === 0 || step16 === 8) playKick();
     if(step16 === 4 || step16 === 12) playSnare();
     if(step16 % 4 === 0){
-  flashBeats(beatInBar);
-  flashEyes();
+      flashBeats(beatInBar);
+      flashEyes();
     }
 
     metroBeat16++;
@@ -756,9 +753,11 @@ function stopMetronome(){
   metroTimer = null;
   metroOn = false;
   els.metroBtn.textContent = "Metronome";
-  els.metroBtn.classList.remove("on");// If you stop the metronome while still recording, keep blinking on BPM
-if(recording) startEyePulseFromBpm();
-else stopEyePulse();
+  els.metroBtn.classList.remove("on");
+
+  // If you stop the metronome while still recording, keep blinking on BPM
+  if(recording) startEyePulseFromBpm();
+  else stopEyePulse();
 }
 
 // ---------- smooth playback (WebAudio) ----------
@@ -901,9 +900,11 @@ async function startRecording(){
 
   recChunks = [];
   recording = true;
-  updateRecordButtonUI();// If recording without metronome, still blink on BPM
-if(!metroOn) startEyePulseFromBpm();
-else stopEyePulse();
+  updateRecordButtonUI();
+
+  // If recording without metronome, still blink on BPM
+  if(!metroOn) startEyePulseFromBpm();
+  else stopEyePulse();
 
   stopSmoothPlayback();
 
@@ -920,7 +921,8 @@ else stopEyePulse();
 
   recorder.onstop = async ()=>{
     recording = false;
-    updateRecordButtonUI();stopEyePulse();
+    updateRecordButtonUI();
+    stopEyePulse();
 
     if(metroOn) stopMetronome();
 
@@ -1093,92 +1095,75 @@ function renderRecordings(){
   }
 }
 
-// ---------- FULL editor ----------
-function buildFullTextFromProject(p){
-  const out = [];
-  for(const key of FULL_ORDER){
-    const heading = (SECTION_DEFS.find(s=>s.key===key)?.title || key).toUpperCase();
-    out.push(heading);
-
-    const sec = p.sections[key];
-    if(sec?.bars){
-      for(const b of sec.bars){
-        const t = (b.text || "").replace(/\s+$/,"");
-        if(!t.trim()) continue;
-        out.push(t);
-        out.push("");
-      }
-    }
-    out.push("");
-  }
-  return out.join("\n");
+// ---------- FULL editor (NEW boxed headers) ----------
+function getSectionTitle(key){
+  return (SECTION_DEFS.find(s=>s.key===key)?.title || key);
 }
 
-function applyFullTextToProject(p, fullText){
-  const lines = String(fullText||"").replace(/\r/g,"").split("\n");
-  let currentKey = null;
-  let writeIndex = 0;
-
-  for(const key of FULL_ORDER){
-    const sec = p.sections[key];
-    if(sec?.bars) sec.bars.forEach(b => b.text = "");
+function buildSectionText(p, key){
+  const sec = p.sections[key];
+  if(!sec?.bars) return "";
+  // only include non-empty lines (keeps behavior similar to old "full" which ignored blanks for bars)
+  const lines = [];
+  for(const b of sec.bars){
+    const t = (b.text || "").replace(/\s+$/,"");
+    if(!t.trim()) continue;
+    lines.push(t);
   }
+  return lines.join("\n");
+}
 
-  function headingToKey(line){
-    const up = String(line||"").trim().toUpperCase();
-    const def = SECTION_DEFS.find(s => s.title.toUpperCase() === up);
-    return def ? def.key : null;
+function applySectionTextToProject(p, key, text){
+  const sec = p.sections[key];
+  if(!sec?.bars) return;
+
+  // clear existing
+  sec.bars.forEach(b => b.text = "");
+
+  const lines = String(text||"").replace(/\r/g,"").split("\n")
+    .map(l => l.replace(/\s+$/,""))
+    .filter(l => l.trim().length); // ignore blank lines like old full mode
+
+  for(let i=0;i<Math.min(lines.length, sec.bars.length); i++){
+    sec.bars[i].text = lines[i];
   }
-
-  for(const raw of lines){
-    const key = headingToKey(raw);
-    if(key){
-      currentKey = key;
-      writeIndex = 0;
-      continue;
-    }
-    if(!currentKey) continue;
-    if(!String(raw).trim()) continue;
-
-    const sec = p.sections[currentKey];
-    if(!sec?.bars) continue;
-    if(writeIndex >= sec.bars.length) continue;
-
-    sec.bars[writeIndex].text = raw.replace(/\s+$/,"");
-    writeIndex++;
-  }
-
   touchProject(p);
 }
 
-function updateRhymesFromFullCaret(fullTa){
-  if(!fullTa) return;
-  const text = fullTa.value || "";
-  const caret = fullTa.selectionStart || 0;
+// For rhymes inside full mode: use the last non-empty line in the active full textarea,
+// or fall back to the last non-empty line in the previous section textarea.
+function updateRhymesFromFullBoxes(activeTa){
+  if(!activeTa) { updateRhymes(""); return; }
+
+  const key = activeTa.getAttribute("data-fullkey") || "";
+  const text = activeTa.value || "";
+  const caret = activeTa.selectionStart || 0;
   const before = text.slice(0, caret);
   const lines = before.replace(/\r/g,"").split("\n");
 
-  let j = lines.length - 2;
-  while(j >= 0){
-    const line = (lines[j] ?? "");
-    const trimmed = line.trim();
-    if(!trimmed){ j--; continue; }
-    const up = trimmed.toUpperCase();
-    if(headingSet.has(up)){ j--; continue; }
-    updateRhymes(lastWord(trimmed));
+  // find last non-empty line above caret in same textarea
+  for(let i = lines.length - 2; i >= 0; i--){
+    const line = (lines[i] ?? "").trim();
+    if(!line) continue;
+    updateRhymes(lastWord(line));
     return;
   }
+
+  // if none, look in previous sections (from the end)
+  const idx = FULL_ORDER.indexOf(key);
+  for(let s = idx - 1; s >= 0; s--){
+    const prevKey = FULL_ORDER[s];
+    const prevTa = els.bars.querySelector(`textarea.fullEditor[data-fullkey="${prevKey}"]`);
+    if(!prevTa) continue;
+    const prevLines = (prevTa.value || "").replace(/\r/g,"").split("\n").map(x=>x.trim()).filter(Boolean);
+    if(prevLines.length){
+      updateRhymes(lastWord(prevLines[prevLines.length-1]));
+      return;
+    }
+  }
+
   updateRhymes("");
 }
-
-document.addEventListener("selectionchange", ()=>{
-  const p = getActiveProject();
-  if(p.activeSection !== "full") return;
-  const ta = document.getElementById("fullEditor");
-  if(!ta) return;
-  if(document.activeElement !== ta) return;
-  updateRhymesFromFullCaret(ta);
-}, { passive:true });
 
 // ---------- rendering ----------
 function renderProjectList(){
@@ -1287,36 +1272,104 @@ function renderTabs(){
 function renderBars(){
   const p = getActiveProject();
 
+  // ✅ FULL MODE now shows boxed headers + one editor per section
   if(p.activeSection === "full"){
-    const fullText = buildFullTextFromProject(p);
+    const sectionsHtml = FULL_ORDER.map((key)=>{
+      const title = getSectionTitle(key).toUpperCase();
+      const text = buildSectionText(p, key);
+      return `
+        <div class="fullSection" data-fullwrap="${escapeHtml(key)}">
+          <div class="fullHeaderBox">${escapeHtml(title)}</div>
+          <textarea class="fullEditor" data-fullkey="${escapeHtml(key)}" spellcheck="false" placeholder="Type ${escapeHtml(title)} here…">${escapeHtml(text)}</textarea>
+        </div>
+      `;
+    }).join("");
+
     els.bars.innerHTML = `
       <div class="fullBox">
         <div class="fullSub">
-          Paste + edit here. Rhymes follow the last word on the line ABOVE your cursor.<br>
-          ✅ Blank lines are just spacing (they do NOT create empty bars).<br>
-          Headings: ${FULL_HEADINGS.join(", ")}
+          Full view with boxed section headers. Blank lines are just spacing (they do NOT create empty bars).<br>
+          Tip: Tap a section and use the rhyme dock to insert words.
         </div>
-        <textarea id="fullEditor" class="fullEditor" spellcheck="false">${escapeHtml(fullText)}</textarea>
+        <div class="fullGrid">
+          ${sectionsHtml}
+        </div>
       </div>
     `;
 
-    const ta = document.getElementById("fullEditor");
-    let tmr = null;
+    // inject a little CSS for the boxed headers (kept inside JS so index.html stays unchanged)
+    if(!document.getElementById("fullBoxCSS")){
+      const st = document.createElement("style");
+      st.id = "fullBoxCSS";
+      st.textContent = `
+        .fullGrid{
+          display:flex;
+          flex-direction:column;
+          gap:12px;
+        }
+        .fullSection{
+          border:1px solid rgba(0,0,0,.12);
+          border-radius:18px;
+          padding:10px;
+          box-shadow: 0 10px 24px rgba(0,0,0,.06);
+          background:#fff;
+        }
+        .fullHeaderBox{
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          padding:8px 12px;
+          border-radius:14px;
+          border:2px solid rgba(0,0,0,.12);
+          background: rgba(0,0,0,.06);
+          font-weight:1000;
+          letter-spacing:.8px;
+          font-size:12px;
+          margin-bottom:8px;
+          user-select:none;
+        }
+        .fullSection .fullEditor{
+          height:220px;
+          min-height:160px;
+          background:#fff;
+        }
+        body.fullMode .fullSection .fullEditor{
+          height:260px;
+        }
+      `;
+      document.head.appendChild(st);
+    }
 
-    const commit = () => applyFullTextToProject(p, ta.value || "");
-    const refresh = () => { updateRhymesFromFullCaret(ta); updateDockForKeyboard(); };
+    const editors = Array.from(els.bars.querySelectorAll("textarea.fullEditor"));
+    const tmrByKey = new Map();
 
-    refresh();
+    function bindEditor(ta){
+      const key = ta.getAttribute("data-fullkey");
+      if(!key) return;
 
-    ta.addEventListener("input", ()=>{
-      if(tmr) clearTimeout(tmr);
-      tmr = setTimeout(commit, 220);
-      refresh();
-    });
-    ta.addEventListener("click", refresh);
-    ta.addEventListener("keyup", refresh);
-    ta.addEventListener("focus", refresh);
+      const commit = () => applySectionTextToProject(p, key, ta.value || "");
+      const refresh = () => { updateRhymesFromFullBoxes(ta); updateDockForKeyboard(); };
 
+      ta.addEventListener("focus", ()=>{
+        setLastTypingTarget(ta);
+        refresh();
+      });
+      ta.addEventListener("click", refresh);
+      ta.addEventListener("keyup", refresh);
+
+      ta.addEventListener("input", ()=>{
+        setLastTypingTarget(ta);
+        if(tmrByKey.get(key)) clearTimeout(tmrByKey.get(key));
+        tmrByKey.set(key, setTimeout(commit, 220));
+        refresh();
+      });
+    }
+
+    editors.forEach(bindEditor);
+
+    // start rhymes clean
+    updateRhymes("");
+    updateDockForKeyboard();
     return;
   }
 
@@ -1379,6 +1432,7 @@ function renderBars(){
 
     ta.addEventListener("focus", ()=>{
       focusedBarIdx = idx;
+      setLastTypingTarget(ta);
       refreshRhymesForCaret();
       updateDockForKeyboard();
     });
