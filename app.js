@@ -1479,7 +1479,7 @@ function renderAll(){
   renderRecordings();
 
   if(els.statusText){
-    els.statusText.textContent = "";
+    els.statusText.textContent = " ";
   }
   updateDockForKeyboard();
   updateRecordButtonUI();
