@@ -1251,9 +1251,20 @@ function setupInfinitePages(pagerEl){
         const x = pagerEl.scrollLeft;
 
         // nearest page in the *current* group you’re viewing
-        const rel = x % pagesCopyWidth;
-        const idx = Math.round(rel / pageViewportW);
-        const snapped = (x - rel) + (idx * pageViewportW);
+       const len = PAGE_ORDER.length;
+
+// make rel ALWAYS positive (android can be weird with %)
+const rel = ((x % pagesCopyWidth) + pagesCopyWidth) % pagesCopyWidth;
+
+// pick nearest page
+let idx = Math.round(rel / pageViewportW);
+
+// clamp idx so it can NEVER become len
+if(idx < 0) idx = 0;
+if(idx > len - 1) idx = len - 1;
+
+const snapped = (x - rel) + (idx * pageViewportW);
+
 
         pagerEl.scrollTo({ left: snapped, behavior: "smooth" });
       }, 90);
