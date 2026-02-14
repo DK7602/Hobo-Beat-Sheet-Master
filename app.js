@@ -1,27 +1,20 @@
-window.updateBlinkTargets = window.updateBlinkTargets || function(){};
-window.updateBlinkTargets = window.updateBlinkTargets || function(){};
-/* Beat Sheet Pro - app.js (FULL REPLACE) */
+/* Beat Sheet Pro - app.js (FULL REPLACE v_EXPORT_HTML_2FILES) */
 (() => {
-"use strict";// ✅ remembers last textarea user typed in (mobile fix)
-let lastTextarea = null;
+"use strict";
 
+/***********************
+✅ remembers last textarea user typed in (mobile fix)
+***********************/
+let lastTextarea = null;
 document.addEventListener("focusin", (e)=>{
   const t = e.target;
-  if(t && t.tagName === "TEXTAREA"){
-    lastTextarea = t;
-  }
+  if(t && t.tagName === "TEXTAREA") lastTextarea = t;
 });
 
-/**
- * ✅ STORAGE ISOLATION (IMPORTANT)
- * Scopes localStorage keys to the FIRST folder in the URL path.
- * Examples:
- *  - https://dk7602.github.io/Hobo-Beat-Sheet-/              => scope "Hobo-Beat-Sheet-"
- *  - https://dk7602.github.io/Beat-Sheet-Pro---Shared/       => scope "Beat-Sheet-Pro---Shared"
- *
- * Result: Main + Shared DO NOT share projects/recordings.
- */
-const APP_VERSION = "Hobo Beat Sheet";// bump to verify Shared updated
+/***********************
+✅ STORAGE ISOLATION (IMPORTANT)
+***********************/
+const APP_VERSION = "Hobo Beat Sheet";
 
 const need = (id) => document.getElementById(id);
 const els = {
@@ -31,7 +24,13 @@ const els = {
   metroBtn: need("metroBtn"),
   highlightMode: need("highlightMode"),
   autoSplitMode: need("autoSplitMode"),
-  projectSort: need("projectSort"),
+
+  // merged header projects UI
+  projectPicker: need("projectPicker"),
+  newProjectBtn: need("newProjectBtn"),
+  copyProjectBtn: need("copyProjectBtn"),
+  deleteProjectBtn: need("deleteProjectBtn"),
+
   toast: need("toast"),
   statusText: need("statusText"),
 
@@ -41,9 +40,7 @@ const els = {
   sectionTabs: need("sectionTabs"),
   bars: need("bars"),
 
-  projectName: need("projectName"),
-  projectList: need("projectList"),
-  newProjectBtn: need("newProjectBtn"),
+  projectName: need("projectName"), // now in header
 
   recordBtn: need("recordBtn"),
   recordName: need("recordName"),
@@ -56,7 +53,6 @@ const els = {
   dockToggle: need("dockToggle"),
 };
 
-// ✅ NEW: repo-scoped storage keys
 const STORAGE_SCOPE = (() => {
   const firstFolder = (location.pathname.split("/").filter(Boolean)[0] || "root");
   return firstFolder.replace(/[^a-z0-9_-]+/gi, "_");
@@ -68,7 +64,6 @@ const RHYME_CACHE_KEY = `${KEY_PREFIX}rhyme_cache_v1`;
 const DOCK_HIDDEN_KEY = `${KEY_PREFIX}rhymeDock_hidden_v1`;
 const HEADER_COLLAPSED_KEY = `${KEY_PREFIX}header_collapsed_v1`;
 
-// ✅ Optional: one-time migrate from old unscoped keys -> scoped keys (ONLY if scoped empty)
 const OLD_STORAGE_KEY = "beatsheetpro_projects_v1";
 const OLD_RHYME_CACHE_KEY = "beatsheetpro_rhyme_cache_v1";
 const OLD_DOCK_HIDDEN_KEY = "beatsheetpro_rhymeDock_hidden_v1";
@@ -130,24 +125,22 @@ function clampInt(v,min,max){
 
 // ---------- headshot eye blink ----------
 let eyePulseTimer = null;
+let metroOn = false;
+let recording = false;
 
 function headerIsVisibleForEyes(){
-  // Only blink when upper section is NOT hidden (header not collapsed)
   return !document.body.classList.contains("headerCollapsed");
 }
-
 function getEyeEls(){
   const eyeL = document.getElementById("eyeL");
   const eyeR = document.getElementById("eyeR");
   if(!eyeL || !eyeR) return null;
   return { eyeL, eyeR };
 }
-
 function flashEyes(){
   if(!headerIsVisibleForEyes()) return;
   const eyes = getEyeEls();
   if(!eyes) return;
-
   eyes.eyeL.classList.add("on");
   eyes.eyeR.classList.add("on");
   setTimeout(()=>{
@@ -155,12 +148,10 @@ function flashEyes(){
     eyes.eyeR.classList.remove("on");
   }, 90);
 }
-
 function stopEyePulse(){
   if(eyePulseTimer) clearInterval(eyePulseTimer);
   eyePulseTimer = null;
 }
-
 function startEyePulseFromBpm(){
   stopEyePulse();
   if(!headerIsVisibleForEyes()) return;
@@ -168,16 +159,11 @@ function startEyePulseFromBpm(){
 
   const p = getActiveProject();
   const bpm = clampInt(parseInt(els.bpm?.value || p.bpm || 95, 10), 40, 240);
-  const intervalMs = 60000 / bpm; // quarter-note pulse
-
+  const intervalMs = 60000 / bpm;
   eyePulseTimer = setInterval(()=>flashEyes(), intervalMs);
 }
-
 // Some older builds referenced this. Keep it defined so Shared never crashes.
-function updateBlinkTargets(){
-  // No-op: our blink targets are always #eyeL and #eyeR in the header.
-  return;
-}
+window.updateBlinkTargets = window.updateBlinkTargets || function(){};
 
 // ---------- header collapse ----------
 function loadHeaderCollapsed(){
@@ -192,39 +178,28 @@ function setHeaderCollapsed(isCollapsed){
   if(els.headerToggle2) els.headerToggle2.textContent = isCollapsed ? "Show" : "Hide";
   saveHeaderCollapsed(!!isCollapsed);
   updateDockForKeyboard();
-
-  // if header hidden, stop eyes; if shown and metro/rec running, resume
   if(isCollapsed) stopEyePulse();
   else startEyePulseFromBpm();
 }
-if(els.headerToggle){
-  els.headerToggle.addEventListener("click", ()=>{
-    const collapsed = document.body.classList.contains("headerCollapsed");
-    setHeaderCollapsed(!collapsed);
-  });
-}
-if(els.headerToggle2){
-  els.headerToggle2.addEventListener("click", ()=>{
-    const collapsed = document.body.classList.contains("headerCollapsed");
-    setHeaderCollapsed(!collapsed);
-  });
-}
+els.headerToggle?.addEventListener("click", ()=>{
+  const collapsed = document.body.classList.contains("headerCollapsed");
+  setHeaderCollapsed(!collapsed);
+});
+els.headerToggle2?.addEventListener("click", ()=>{
+  const collapsed = document.body.classList.contains("headerCollapsed");
+  setHeaderCollapsed(!collapsed);
+});
 
 // Keep rhyme dock visible above keyboard (Android)
 function updateDockForKeyboard(){
   const vv = window.visualViewport;
   if(!els.rhymeDock) return;
-  if(!vv){
-    els.rhymeDock.style.bottom = "10px";
-    return;
-  }
+  if(!vv){ els.rhymeDock.style.bottom = "10px"; return; }
   const keyboardPx = Math.max(0, (window.innerHeight - vv.height - vv.offsetTop));
   els.rhymeDock.style.bottom = (10 + keyboardPx) + "px";
 }
-if(window.visualViewport){
-  window.visualViewport.addEventListener("resize", updateDockForKeyboard);
-  window.visualViewport.addEventListener("scroll", updateDockForKeyboard);
-}
+window.visualViewport?.addEventListener("resize", updateDockForKeyboard);
+window.visualViewport?.addEventListener("scroll", updateDockForKeyboard);
 window.addEventListener("resize", updateDockForKeyboard);
 
 // ---------- rhyme dock hide/show ----------
@@ -241,16 +216,13 @@ function setDockHidden(isHidden){
   saveDockHidden(!!isHidden);
   updateDockForKeyboard();
 }
-if(els.dockToggle){
-  els.dockToggle.addEventListener("click", ()=>{
-    const nowHidden = els.rhymeDock?.classList?.contains("dockHidden");
-    setDockHidden(!nowHidden);
-  });
-}
+els.dockToggle?.addEventListener("click", ()=>{
+  const nowHidden = els.rhymeDock?.classList?.contains("dockHidden");
+  setDockHidden(!nowHidden);
+});
 
 // ---------- syllables ----------
 function normalizeWord(w){ return (w||"").toLowerCase().replace(/[^a-z']/g,""); }
-
 const SYLL_DICT = {
   "im":1,"i'm":1,"ive":1,"i've":1,"ill":1,"i'll":1,"id":1,"i'd":1,
   "dont":1,"don't":1,"cant":1,"can't":1,"wont":1,"won't":1,"aint":1,"ain't":1,
@@ -258,14 +230,10 @@ const SYLL_DICT = {
   "wanna":2,"gonna":2,"tryna":2,"lemme":2,"gotta":2,"kinda":2,"outta":2,
   "toyota":3,"hiphop":2,"gfunk":2,"gangsta":2,"birthday":2
 };
-
 function countSyllablesWord(word){
   if(!word) return 0;
-
-  // optional forced syllables like: "hello(3)"
   const forced = String(word).match(/\((\d+)\)\s*$/);
   if(forced) return Math.max(1, parseInt(forced[1],10));
-
   let w = normalizeWord(word);
   if(!w) return 0;
   if(SYLL_DICT[w] != null) return SYLL_DICT[w];
@@ -284,13 +252,11 @@ function countSyllablesWord(word){
 
   return Math.max(1, count || 1);
 }
-
 function countSyllablesLine(line){
   const clean = (line||"").replace(/[\/]/g," ").trim();
   if(!clean) return 0;
   return clean.split(/\s+/).filter(Boolean).reduce((sum,w)=>sum+countSyllablesWord(w),0);
 }
-
 function syllGlowClass(n){
   if(!n) return "";
   if(n <= 6) return "red";
@@ -305,7 +271,6 @@ function splitBySlashes(text){
   const parts = (text||"").split("/").map(s=>s.trim());
   return [parts[0]||"", parts[1]||"", parts[2]||"", parts[3]||""];
 }
-
 function autoSplitWords(text){
   const clean = (text||"").replace(/[\/]/g," ").trim();
   if(!clean) return ["","","",""];
@@ -320,7 +285,6 @@ function autoSplitWords(text){
     words.slice(per3).join(" "),
   ];
 }
-
 function splitWordIntoChunks(word){
   const raw = String(word);
   const cleaned = raw.replace(/[^A-Za-z']/g,"");
@@ -334,13 +298,11 @@ function splitWordIntoChunks(word){
   }
   return out.length ? out : [raw];
 }
-
 function chunkSyllCount(chunk){
   const w = String(chunk).toLowerCase().replace(/[^a-z']/g,"").replace(/'/g,"");
   const groups = w.match(/[aeiouy]+/g);
   return Math.max(1, (groups ? groups.length : 0) || 1);
 }
-
 function buildTargets(total){
   const base = Math.floor(total/4);
   const rem = total % 4;
@@ -352,16 +314,13 @@ function buildTargets(total){
   }
   return t;
 }
-
 function autoSplitSyllablesClean(text){
   const clean = (text||"").replace(/[\/]/g," ").trim();
   if(!clean) return ["","","",""];
-
   const words = clean.split(/\s+/).filter(Boolean);
   const sylls = words.map(w=>countSyllablesWord(w));
   const total = sylls.reduce((a,b)=>a+b,0);
   if(!total) return ["","","",""];
-
   const targets = buildTargets(total);
   const beats = [[],[],[],[]];
   const beatSyll = [0,0,0,0];
@@ -384,7 +343,6 @@ function autoSplitSyllablesClean(text){
       beatSyll[b] += s;
       continue;
     }
-
     if(rem2 <= 1 && b < 3){
       b++;
       pushWord(b, w);
@@ -397,14 +355,12 @@ function autoSplitSyllablesClean(text){
 
     let take = [];
     let takeSyll = 0;
-
     for(let c=0;c<chunks.length;c++){
       if(takeSyll + chunkS[c] > rem2 && take.length > 0) break;
       take.push(chunks[c]);
       takeSyll += chunkS[c];
       if(takeSyll >= rem2) break;
     }
-
     if(!take.length){
       pushWord(b, w);
       beatSyll[b] += s;
@@ -429,7 +385,6 @@ function autoSplitSyllablesClean(text){
 
   return beats.map(arr=>arr.join(" ").trim());
 }
-
 function computeBeats(text, mode){
   const hasSlash = (text||"").includes("/");
   if(hasSlash) return splitBySlashes(text);
@@ -454,7 +409,6 @@ function lastWord(str){
   const parts = s.split(/\s+/).filter(Boolean);
   return parts.length ? parts[parts.length-1].replace(/^-+|-+$/g,"") : "";
 }
-
 function caretBeatIndex(text, caretPos){
   const before = (text||"").slice(0, Math.max(0, caretPos||0));
   const count = (before.match(/\//g) || []).length;
@@ -468,14 +422,12 @@ async function updateRhymes(seed){
     if(els.rhymeList) els.rhymeList.innerHTML = `<span class="small">Rhymes appear for last word in previous beat box.</span>`;
     return;
   }
-
   if(els.rhymeBase) els.rhymeBase.textContent = w;
 
   if(Array.isArray(rhymeCache[w]) && rhymeCache[w].length){
     renderRhymes(rhymeCache[w]);
     return;
   }
-
   if(els.rhymeList) els.rhymeList.innerHTML = `<span class="small">Loading…</span>`;
 
   try{
@@ -495,7 +447,6 @@ async function updateRhymes(seed){
     if(els.rhymeList) els.rhymeList.innerHTML = `<span class="small" style="color:#b91c1c;">Rhyme lookup failed.</span>`;
   }
 }
-
 function renderRhymes(words){
   if(!els.rhymeList) return;
   if(!words || !words.length){
@@ -507,19 +458,6 @@ function renderRhymes(words){
     .join("");
 }
 
-/**
-// ✅ Track the last textarea the user was editing (mobile loses focus on tap)
-let lastTextarea = null;
-document.addEventListener("focusin", (e)=>{
-  const ta = e.target;
-  if(ta && ta.tagName === "TEXTAREA") lastTextarea = ta;
-});
-
-/**
- * ✅ RHYME CLICK BEHAVIOR (MOBILE-PROOF)
- * Always inserts into the last textarea you were editing.
- * Clipboard copy is only used if no textarea exists yet.
- */
 // ✅ MOBILE-PROOF rhyme insert
 document.addEventListener("click", (e)=>{
   const chip = e.target.closest(".rhymeChip");
@@ -528,14 +466,9 @@ document.addEventListener("click", (e)=>{
   const word = (chip.getAttribute("data-rhyme") || chip.textContent || "").trim();
   if(!word) return;
 
-  // Use active textarea OR last focused textarea
   let ta = null;
-
-  if(document.activeElement && document.activeElement.tagName === "TEXTAREA"){
-    ta = document.activeElement;
-  } else {
-    ta = lastTextarea;
-  }
+  if(document.activeElement && document.activeElement.tagName === "TEXTAREA") ta = document.activeElement;
+  else ta = lastTextarea;
 
   if(ta && ta.tagName === "TEXTAREA"){
     ta.focus();
@@ -546,7 +479,6 @@ document.addEventListener("click", (e)=>{
     const before = ta.value.slice(0,start);
     const after  = ta.value.slice(end);
 
-    // replace current word fragment
     const match = before.match(/(^|[\s\/])([^\s\/]*)$/);
     const prefix = match ? before.slice(0, before.length - (match[2]||"").length) : before;
 
@@ -566,7 +498,6 @@ document.addEventListener("click", (e)=>{
     return;
   }
 
-  // fallback copy
   navigator.clipboard?.writeText?.(word)
     .then(()=>showToast("Copied"))
     .catch(()=>showToast("Copy failed"));
@@ -584,7 +515,6 @@ function blankSections(){
   }
   return sections;
 }
-
 function newProject(name=""){
   return {
     id: uid(),
@@ -599,12 +529,11 @@ function newProject(name=""){
     sections: blankSections(),
   };
 }
-
 function loadStore(){
   const raw = localStorage.getItem(STORAGE_KEY);
   if(!raw){
     const p = newProject("");
-    const s = { activeProjectId: p.id, projects:[p], projectSort:"recent" };
+    const s = { activeProjectId: p.id, projects:[p] };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
     return s;
   }
@@ -614,7 +543,6 @@ function loadStore(){
     return loadStore();
   }
 }
-
 let store = loadStore();
 
 function repairProject(p){
@@ -646,13 +574,30 @@ function saveStore(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(store)); 
 function getActiveProject(){ return store.projects.find(p=>p.id===store.activeProjectId) || store.projects[0]; }
 function touchProject(p){ p.updatedAt = nowISO(); saveStore(); }
 
-// ---------- metronome ----------
+// ✅ header project picker
+function renderProjectPicker(){
+  if(!els.projectPicker) return;
+
+  const projects = [...store.projects].sort((a,b)=>{
+    const an = (a.name||"").trim() || "(unnamed)";
+    const bn = (b.name||"").trim() || "(unnamed)";
+    return an.localeCompare(bn, undefined, { sensitivity:"base" });
+  });
+
+  const active = getActiveProject();
+  els.projectPicker.innerHTML = projects.map(p=>{
+    const label = (p.name||"").trim() || "(unnamed)";
+    const sel = (p.id === active.id) ? "selected" : "";
+    return `<option value="${escapeHtml(p.id)}" ${sel}>${escapeHtml(label)}</option>`;
+  }).join("");
+}
+
+// ---------- metronome + recording (unchanged core) ----------
 let audioCtx = null;
 let metroGain = null;
 let recordDest = null;
 
 let metroTimer = null;
-let metroOn = false;
 let metroBeat16 = 0;
 
 function ensureAudio(){
@@ -660,14 +605,11 @@ function ensureAudio(){
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     metroGain = audioCtx.createGain();
     metroGain.gain.value = 0.9;
-
     recordDest = audioCtx.createMediaStreamDestination();
-
     metroGain.connect(audioCtx.destination);
     metroGain.connect(recordDest);
   }
 }
-
 function playKick(){
   ensureAudio();
   const t = audioCtx.currentTime;
@@ -682,16 +624,13 @@ function playKick(){
   o.connect(g); g.connect(metroGain);
   o.start(t); o.stop(t + 0.14);
 }
-
 function playSnare(){
   ensureAudio();
   const t = audioCtx.currentTime;
   const bufferSize = Math.floor(audioCtx.sampleRate * 0.12);
   const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
   const data = buffer.getChannelData(0);
-  for(let i=0;i<bufferSize;i++){
-    data[i] = (Math.random()*2-1) * (1 - i/bufferSize);
-  }
+  for(let i=0;i<bufferSize;i++) data[i] = (Math.random()*2-1) * (1 - i/bufferSize);
   const noise = audioCtx.createBufferSource();
   noise.buffer = buffer;
 
@@ -711,16 +650,13 @@ function playSnare(){
   noise.start(t);
   noise.stop(t + 0.12);
 }
-
 function playHat(){
   ensureAudio();
   const t = audioCtx.currentTime;
   const bufferSize = Math.floor(audioCtx.sampleRate * 0.03);
   const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
   const data = buffer.getChannelData(0);
-  for(let i=0;i<bufferSize;i++){
-    data[i] = (Math.random()*2-1) * (1 - i/bufferSize);
-  }
+  for(let i=0;i<bufferSize;i++) data[i] = (Math.random()*2-1) * (1 - i/bufferSize);
   const noise = audioCtx.createBufferSource();
   noise.buffer = buffer;
 
@@ -742,7 +678,6 @@ function playHat(){
 }
 
 let focusedBarIdx = 0;
-
 function flashBeats(beatInBar){
   const p = getActiveProject();
   const highlight = p.highlightMode || "focused";
@@ -768,14 +703,11 @@ function startMetronome(){
     els.metroBtn.classList.add("on");
   }
   metroBeat16 = 0;
-
-  // ✅ start eye pulse
   startEyePulseFromBpm();
 
   const tick = () => {
     const p = getActiveProject();
     const bpm = clampInt(parseInt(els.bpm?.value || p.bpm,10), 40, 240);
-
     const intervalMs = 60000 / bpm / 4;
     const step16 = metroBeat16 % 16;
     const beatInBar = Math.floor(step16 / 4);
@@ -788,10 +720,8 @@ function startMetronome(){
     metroBeat16++;
     metroTimer = setTimeout(tick, intervalMs);
   };
-
   tick();
 }
-
 function stopMetronome(){
   if(metroTimer) clearTimeout(metroTimer);
   metroTimer = null;
@@ -800,12 +730,10 @@ function stopMetronome(){
     els.metroBtn.textContent = "Metronome";
     els.metroBtn.classList.remove("on");
   }
-
-  // ✅ stop eye pulse IF not recording
   if(!recording) stopEyePulse();
 }
 
-// ---------- smooth playback (WebAudio) ----------
+// smooth playback
 let currentPlayback = null;
 let currentPlaybackId = null;
 const decodedCache = new Map();
@@ -815,23 +743,19 @@ function stopSmoothPlayback(){
   currentPlayback = null;
   currentPlaybackId = null;
 }
-
 async function dataUrlToBlob(dataUrl){
   const res = await fetch(dataUrl);
   return await res.blob();
 }
-
 async function getDecodedBufferForRec(rec){
   ensureAudio();
   if(decodedCache.has(rec.id)) return decodedCache.get(rec.id);
-
   const blob = await dataUrlToBlob(rec.dataUrl);
   const arr = await blob.arrayBuffer();
   const buffer = await audioCtx.decodeAudioData(arr);
   decodedCache.set(rec.id, buffer);
   return buffer;
 }
-
 async function play(rec){
   ensureAudio();
   if(audioCtx.state === "suspended") await audioCtx.resume();
@@ -840,7 +764,6 @@ async function play(rec){
   if(metroOn) stopMetronome();
 
   const buffer = await getDecodedBufferForRec(rec);
-
   const src = audioCtx.createBufferSource();
   src.buffer = buffer;
   src.connect(audioCtx.destination);
@@ -857,7 +780,6 @@ async function play(rec){
     }
   };
 }
-
 async function downloadRec(rec){
   try{
     const blob = await dataUrlToBlob(rec.dataUrl);
@@ -874,11 +796,9 @@ async function downloadRec(rec){
   }
 }
 
-// ---------- recording ----------
+// recording
 let recorder = null;
 let recChunks = [];
-let recording = false;
-
 let micStream = null;
 let micSource = null;
 let micGain = null;
@@ -892,24 +812,16 @@ async function ensureMic(){
   micSource = audioCtx.createMediaStreamSource(micStream);
   micGain = audioCtx.createGain();
   micGain.gain.value = 1.0;
-
   micSource.connect(micGain);
   micGain.connect(recordDest);
 }
-
 function pickBestMime(){
-  const candidates = [
-    "audio/webm;codecs=opus",
-    "audio/webm",
-    "audio/ogg;codecs=opus",
-    "audio/ogg"
-  ];
+  const candidates = ["audio/webm;codecs=opus","audio/webm","audio/ogg;codecs=opus","audio/ogg"];
   for(const m of candidates){
     if(window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) return m;
   }
   return "";
 }
-
 function blobToDataURL(blob){
   return new Promise((resolve)=>{
     const r = new FileReader();
@@ -917,16 +829,8 @@ function blobToDataURL(blob){
     r.readAsDataURL(blob);
   });
 }
-
-function takeNameFromInput(){
-  return (els.recordName?.value || "").trim();
-}
-function clearTakeNameInput(){
-  if(!els.recordName) return;
-  els.recordName.value = "";
-}
-
-/* ✅ button text now Record / Stop */
+function takeNameFromInput(){ return (els.recordName?.value || "").trim(); }
+function clearTakeNameInput(){ if(els.recordName) els.recordName.value = ""; }
 function updateRecordButtonUI(){
   if(!els.recordBtn) return;
   if(recording){
@@ -937,7 +841,6 @@ function updateRecordButtonUI(){
     els.recordBtn.classList.remove("recOn");
   }
 }
-
 async function startRecording(){
   await ensureMic();
   ensureAudio();
@@ -946,10 +849,7 @@ async function startRecording(){
   recChunks = [];
   recording = true;
   updateRecordButtonUI();
-
   stopSmoothPlayback();
-
-  // ✅ start eye pulse
   startEyePulseFromBpm();
 
   const mimeType = pickBestMime();
@@ -974,23 +874,14 @@ async function startRecording(){
     const dataUrl = await blobToDataURL(blob);
 
     const p = getActiveProject();
-
     const typed = takeNameFromInput();
     const name = typed || `Take ${new Date().toLocaleString()}`;
 
-    const rec = {
-      id: uid(),
-      name,
-      createdAt: nowISO(),
-      mime: blob.type || "audio/webm",
-      dataUrl
-    };
-
+    const rec = { id: uid(), name, createdAt: nowISO(), mime: blob.type || "audio/webm", dataUrl };
     p.recordings.unshift(rec);
     decodedCache.delete(rec.id);
 
     clearTakeNameInput();
-
     touchProject(p);
     renderRecordings();
     showToast("Saved take");
@@ -998,7 +889,6 @@ async function startRecording(){
 
   recorder.start(1000);
 }
-
 function stopRecording(){
   if(recorder && recording) recorder.stop();
 }
@@ -1089,13 +979,8 @@ function renderRecordings(){
     playBtn.title = "Play";
     playBtn.textContent = (currentPlaybackId === rec.id) ? "…" : "▶";
     playBtn.addEventListener("click", async ()=>{
-      try{
-        await play(rec);
-        renderRecordings();
-      }catch(e){
-        console.error(e);
-        showToast("Playback failed");
-      }
+      try{ await play(rec); renderRecordings(); }
+      catch(e){ console.error(e); showToast("Playback failed"); }
     });
 
     const stopBtn = document.createElement("button");
@@ -1159,7 +1044,6 @@ function buildFullTextFromProject(p){
   }
   return out.join("\n");
 }
-
 function applyFullTextToProject(p, fullText){
   const lines = String(fullText||"").replace(/\r/g,"").split("\n");
   let currentKey = null;
@@ -1178,11 +1062,7 @@ function applyFullTextToProject(p, fullText){
 
   for(const raw of lines){
     const key = headingToKey(raw);
-    if(key){
-      currentKey = key;
-      writeIndex = 0;
-      continue;
-    }
+    if(key){ currentKey = key; writeIndex = 0; continue; }
     if(!currentKey) continue;
     if(!String(raw).trim()) continue;
 
@@ -1227,80 +1107,6 @@ document.addEventListener("selectionchange", ()=>{
 }, { passive:true });
 
 // ---------- rendering ----------
-function renderProjectList(){
-  const sort = store.projectSort || "recent";
-  const projects = [...store.projects];
-
-  if(sort === "az"){
-    projects.sort((a,b)=>(a.name||"").localeCompare(b.name||"", undefined, { sensitivity:"base" }));
-  }else{
-    projects.sort((a,b)=>(b.updatedAt||"").localeCompare(a.updatedAt||""));
-  }
-
-  els.projectList.innerHTML = "";
-  const active = getActiveProject();
-
-  for(const proj of projects){
-    const row = document.createElement("div");
-    row.style.display="flex";
-    row.style.gap="8px";
-    row.style.alignItems="center";
-    row.style.marginBottom="8px";
-    row.style.flexWrap="wrap";
-
-    const btn = document.createElement("button");
-    btn.textContent = proj.name?.trim() ? proj.name.trim() : "(unnamed)";
-    btn.style.flex="1";
-    if(proj.id === active.id){
-      btn.style.background="#111";
-      btn.style.color="#fff";
-      btn.style.borderColor="#111";
-    }
-    btn.addEventListener("click", ()=>{
-      store.activeProjectId = proj.id;
-      saveStore();
-      renderAll();
-      showToast("Opened");
-    });
-
-    const dup = document.createElement("button");
-    dup.textContent="Copy";
-    dup.addEventListener("click", ()=>{
-      const clone = JSON.parse(JSON.stringify(proj));
-      clone.id = uid();
-      clone.name = (proj.name || "Project") + " (copy)";
-      clone.createdAt = nowISO();
-      clone.updatedAt = nowISO();
-      store.projects.unshift(repairProject(clone));
-      store.activeProjectId = clone.id;
-      saveStore();
-      renderAll();
-      showToast("Copied");
-    });
-
-    const del = document.createElement("button");
-    del.textContent="Del";
-    del.addEventListener("click", ()=>{
-      if(store.projects.length <= 1){
-        showToast("Can't delete last project");
-        return;
-      }
-      store.projects = store.projects.filter(p=>p.id !== proj.id);
-      if(store.activeProjectId === proj.id){
-        store.activeProjectId = store.projects[0].id;
-      }
-      saveStore();
-      renderAll();
-      showToast("Deleted");
-    });
-
-    row.appendChild(btn);
-    row.appendChild(dup);
-    row.appendChild(del);
-    els.projectList.appendChild(row);
-  }
-}
-
 function renderTabs(){
   const p = getActiveProject();
   els.sectionTabs.innerHTML = "";
@@ -1467,27 +1273,111 @@ function renderAll(){
   const p = getActiveProject();
   document.body.classList.toggle("fullMode", p.activeSection === "full");
 
+  // header fields
   if(els.projectName) els.projectName.value = p.name || "";
   if(els.bpm) els.bpm.value = p.bpm || 95;
   if(els.highlightMode) els.highlightMode.value = p.highlightMode || "focused";
   if(els.autoSplitMode) els.autoSplitMode.value = p.autoSplitMode || "syllables";
-  if(els.projectSort) els.projectSort.value = store.projectSort || "recent";
 
+  renderProjectPicker();
   renderTabs();
-  renderProjectList();
   renderBars();
   renderRecordings();
 
-  if(els.statusText){
-    els.statusText.textContent = " ";
-  }
+  if(els.statusText) els.statusText.textContent = " ";
   updateDockForKeyboard();
   updateRecordButtonUI();
 
-  // keep eyes consistent after rerender/header changes
   if(!(metroOn || recording)) stopEyePulse();
   else startEyePulseFromBpm();
 }
+
+// ---------- EXPORT (NEW): downloads 2 HTML files ----------
+function safeFileName(name){
+  const base = (name || "Beat Sheet Pro Export").trim() || "Beat Sheet Pro Export";
+  return base.replace(/[^\w\s.-]+/g,"").replace(/\s+/g," ").trim();
+}
+
+function makeHtmlDoc(title, bodyText){
+  const esc = escapeHtml(bodyText);
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>${escapeHtml(title)}</title>
+<style>
+  body{ font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:16px; }
+  h1{ font-size:20px; margin:0 0 10px; }
+  .meta{ color:#555; font-size:12px; margin-bottom:14px; }
+  pre{
+    white-space:pre-wrap;
+    word-wrap:break-word;
+    border:1px solid rgba(0,0,0,.12);
+    border-radius:14px;
+    padding:12px;
+    background:#fff;
+    font-size:14px;
+    line-height:1.35;
+    font-weight:700;
+  }
+</style>
+</head>
+<body>
+  <h1>${escapeHtml(title)}</h1>
+  <div class="meta">Exported: ${escapeHtml(new Date().toLocaleString())}</div>
+  <pre>${esc}</pre>
+</body>
+</html>`;
+}
+
+function downloadTextAsFile(filename, text, mime="text/html"){
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 6000);
+}
+
+function buildSplitExportText(p){
+  // Same section headings, but each bar line becomes: b1 | b2 | b3 | b4
+  const modeNow = p.autoSplitMode || "syllables";
+  const out = [];
+  for(const s of SECTION_DEFS){
+    out.push(`[${s.title}]`);
+    const sec = p.sections[s.key];
+    for(const bar of (sec?.bars || [])){
+      const raw = (bar.text || "").trim();
+      if(!raw) continue;
+      const beats = computeBeats(raw, modeNow).map(x => (x||"").trim());
+      const line = beats.filter(Boolean).join(" | "); // vertical separators
+      out.push(line);
+    }
+    out.push("");
+  }
+  return out.join("\n");
+}
+
+els.exportBtn?.addEventListener("click", ()=>{
+  const p = getActiveProject();
+  const name = safeFileName(p.name || "Beat Sheet Pro");
+
+  // File A: Full export (same as Full view)
+  const fullText = buildFullTextFromProject(p).trim() || "";
+  const htmlA = makeHtmlDoc(`${name} — FULL`, fullText);
+  downloadTextAsFile(`${name} - FULL.html`, htmlA);
+
+  // File B: Split export (card split with |)
+  const splitText = buildSplitExportText(p).trim() || "";
+  const htmlB = makeHtmlDoc(`${name} — SPLIT`, splitText);
+  downloadTextAsFile(`${name} - SPLIT.html`, htmlB);
+
+  showToast("Exported 2 HTML files");
+});
 
 // ---------- events ----------
 els.newProjectBtn?.addEventListener("click", ()=>{
@@ -1499,55 +1389,55 @@ els.newProjectBtn?.addEventListener("click", ()=>{
   showToast("New project");
 });
 
+els.copyProjectBtn?.addEventListener("click", ()=>{
+  const active = getActiveProject();
+  const clone = JSON.parse(JSON.stringify(active));
+  clone.id = uid();
+  clone.name = (active.name || "Project") + " (copy)";
+  clone.createdAt = nowISO();
+  clone.updatedAt = nowISO();
+  store.projects.unshift(repairProject(clone));
+  store.activeProjectId = clone.id;
+  saveStore();
+  renderAll();
+  showToast("Copied");
+});
+
+els.deleteProjectBtn?.addEventListener("click", ()=>{
+  const active = getActiveProject();
+  if(store.projects.length <= 1){
+    showToast("Can't delete last project");
+    return;
+  }
+  store.projects = store.projects.filter(p=>p.id !== active.id);
+  store.activeProjectId = store.projects[0].id;
+  saveStore();
+  renderAll();
+  showToast("Deleted");
+});
+
+els.projectPicker?.addEventListener("change", ()=>{
+  const id = els.projectPicker.value;
+  if(!id) return;
+  if(store.projects.find(p=>p.id===id)){
+    store.activeProjectId = id;
+    saveStore();
+    renderAll();
+    showToast("Opened");
+  }
+});
+
 els.projectName?.addEventListener("input", (e)=>{
   const p = getActiveProject();
   p.name = e.target.value || "";
   touchProject(p);
-  renderProjectList();
+  renderProjectPicker(); // keep dropdown label updated
 });
 
 els.saveBtn?.addEventListener("click", ()=>{
   const p = getActiveProject();
   touchProject(p);
   showToast("Saved");
-});
-
-els.exportBtn?.addEventListener("click", async ()=>{
-  const p = getActiveProject();
-  const lines = [];
-  lines.push(`${p.name || "Beat Sheet Pro Export"}`);
-  lines.push(`Updated: ${new Date(p.updatedAt).toLocaleString()}`);
-  lines.push("");
-
-  for(const s of SECTION_DEFS){
-    const sec = p.sections[s.key];
-    lines.push(`[${s.title}]`);
-    sec.bars.forEach(b=>{ if(b.text && b.text.trim()) lines.push(b.text.trim()); });
-    lines.push("");
-  }
-
-  const out = lines.join("\n");
-
-  try{
-    if(navigator.share){
-      await navigator.share({ title:"Beat Sheet Pro", text: out });
-      showToast("Shared");
-      return;
-    }
-  }catch{}
-  try{
-    await navigator.clipboard.writeText(out);
-    showToast("Copied");
-  }catch{
-    showToast("Copy failed");
-  }
-});
-
-els.projectSort?.addEventListener("change", ()=>{
-  store.projectSort = els.projectSort.value || "recent";
-  saveStore();
-  renderProjectList();
-  showToast("Sorted");
 });
 
 els.bpm?.addEventListener("change", ()=>{
