@@ -1,4 +1,4 @@
-<!-- index.html (FULL REPLACE - merged projects + html export + header fixes) -->
+<!-- index.html (FULL REPLACE v_DRUMS4_FIXEDROW_NO_AUTOSPLIT_UI) -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -49,7 +49,7 @@
     body.fullMode header{ max-height:16vh; }
     body.fullMode .miniCard{ display:none; }
 
-    /* ✅ COLLAPSED HEADER: only Show + Metronome + Record */
+    /* ✅ COLLAPSED HEADER: only Show + Drum row + Recordings mini hidden */
     body.headerCollapsed header{
       max-height:none;
       overflow:hidden;
@@ -57,7 +57,6 @@
     }
     body.headerCollapsed .titleRow,
     body.headerCollapsed .topRow,
-    body.headerCollapsed .utilityRow,
     body.headerCollapsed .tabs,
     body.headerCollapsed .miniCard,
     body.headerCollapsed .projRow{
@@ -87,28 +86,13 @@
       white-space:nowrap;
     }
 
-    /* ✅ top row is ONLY: Export, Save, BPM, Hide */
+    /* ✅ top row fixed (no horizontal scroll) */
     .topRow{
       display:flex;
       gap:8px;
-      flex-wrap:nowrap;
+      flex-wrap:wrap; /* wraps instead of scrolling */
       align-items:center;
       margin-bottom:8px;
-      overflow:auto;
-      -webkit-overflow-scrolling: touch;
-      padding-bottom:2px;
-    }
-
-    /* second row: headshot + auto split */
-    .utilityRow{
-      display:flex;
-      gap:8px;
-      flex-wrap:nowrap;
-      align-items:center;
-      margin-bottom:8px;
-      overflow:auto;
-      -webkit-overflow-scrolling: touch;
-      padding-bottom:2px;
     }
 
     button, .pill, input, select{
@@ -125,7 +109,7 @@
       display:flex;
       align-items:center;
       gap:8px;
-      padding:9px 11px;
+      padding:8px 10px;
       flex:0 0 auto;
     }
     .pill label{
@@ -138,29 +122,15 @@
       white-space:nowrap;
     }
 
-    /* ✅ smaller BPM box */
-    .bpmPill{ padding:8px 10px; }
+    /* ✅ narrower BPM */
     input[type="number"]{
-      width:64px;
+      width:52px;
       font-weight:1000;
       padding:8px 9px;
       border-radius:12px;
     }
 
-    .wideInput{
-      width:100%;
-      padding:10px 12px;
-      font-size:15px;
-      font-weight:1000;
-      border-radius:14px;
-    }
-
-    .headshotSlot{
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      flex:0 0 auto;
-    }
+    /* ✅ headshot back to top-right */
     .headshotWrap{
       position:relative;
       width:64px;
@@ -169,6 +139,7 @@
       align-items:center;
       justify-content:center;
       pointer-events:none;
+      flex:0 0 auto;
     }
     .bpmHeadshot{
       width:64px;
@@ -180,7 +151,6 @@
       box-shadow:none;
       pointer-events:none;
     }
-
     .eyeDot{
       position:absolute;
       width:10px;
@@ -202,6 +172,7 @@
       box-shadow: 0 0 10px 4px rgba(255, 43, 43, .55);
     }
 
+    /* ✅ only tabs can scroll horizontally */
     .tabs{
       display:flex;
       gap:8px;
@@ -227,27 +198,35 @@
       border-color:#111;
     }
 
+    /* ✅ fixed drum+record row (no scrolling) */
     .stickyTools{
       display:grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(5, 1fr);
       gap:10px;
       align-items:stretch;
       margin-top:8px;
     }
-    .metroBtn{
+    .drumBtn{
       display:flex; align-items:center; justify-content:center;
-      font-weight:1000; border-radius:16px;
+      font-weight:1000;
+      border-radius:16px;
       border:2px solid rgba(0,0,0,.12);
       background:#fff; color:#111;
-      padding:10px 14px; min-height:64px;
+      padding:10px 0;
+      min-height:56px;
+      font-size:18px;
+      line-height:1;
     }
-    .metroBtn.on{ background:#111; color:#fff; border-color:#111; }
+    .drumBtn.on{ background:#111; color:#fff; border-color:#111; }
+    .drumBtn.active{ box-shadow: 0 0 0 4px rgba(0,0,0,.12); }
+
     .recordBtn{
       display:flex; align-items:center; justify-content:center;
       font-weight:1000; border-radius:16px;
       border:2px solid var(--red);
       background:var(--red); color:#fff;
-      padding:10px 14px; min-height:64px;
+      padding:10px 0; min-height:56px;
+      font-size:14px;
     }
     .recordBtn.recOn{ background:#111; border-color:#111; }
 
@@ -263,14 +242,12 @@
       min-width:0;
       margin-top:10px;
     }
-    .miniTop{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
-    .miniTitle{
-      font-size:11px; font-weight:1000; color:var(--muted);
-      text-transform:uppercase; letter-spacing:.6px;
-    }
-    .miniValue{
-      font-size:13px; font-weight:1000;
-      max-width:65%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    .wideInput{
+      width:100%;
+      padding:10px 12px;
+      font-size:15px;
+      font-weight:1000;
+      border-radius:14px;
     }
 
     main{ padding:10px 10px 26px; }
@@ -306,7 +283,6 @@
       padding:10px 12px;
       transform: translateZ(0);
     }
-
     .rhymeDock.dockHidden{
       left:auto !important;
       right:10px !important;
@@ -371,7 +347,6 @@
       box-shadow:0 4px 10px rgba(0,0,0,.04);
       white-space:nowrap;
     }
-
     .rhymeWrap{
       display:flex;
       gap:8px;
@@ -501,8 +476,8 @@
     }
     .fullEditor{
       width:100%;
-      height:70vh;
-      min-height:420px;
+      height:78vh;
+      min-height:520px;
       resize:vertical;
       padding:12px;
       border-radius:16px;
@@ -514,7 +489,6 @@
       outline:none;
       white-space:pre-wrap;
     }
-    body.fullMode .fullEditor{ height:76vh; min-height:520px; }
 
     .audioItem{
       display:flex;
@@ -570,38 +544,24 @@
       white-space:nowrap;
     }
 
-    /* ✅ projects row: single line, shorter name input, buttons inline */
+    /* ✅ Projects row fixed, no scroll, includes Edit button (no name input) */
     .projRow{
-      display:grid;
-      grid-template-columns: minmax(150px, 1fr) 190px auto auto auto;
+      display:flex;
       gap:8px;
+      flex-wrap:wrap;
       align-items:center;
       width:100%;
       margin-bottom:8px;
-      overflow:auto;
-      -webkit-overflow-scrolling: touch;
-      padding-bottom:2px;
     }
     .projSelect{
-      min-width:150px;
+      min-width:160px;
       font-weight:1000;
-    }
-    .projName{
-      width:190px;
-      min-width:190px;
-      padding:9px 11px;
-      font-size:14px;
-      font-weight:1000;
+      flex:1 1 220px;
     }
     .miniBtn{
       padding:9px 11px;
       border-radius:14px;
-    }
-
-    @media (max-width: 420px){
-      .recordBtn, .metroBtn{ min-height:52px; }
-      .projRow{ grid-template-columns: minmax(140px, 1fr) 170px auto auto auto; }
-      .projName{ width:170px; min-width:170px; }
+      flex:0 0 auto;
     }
   </style>
 </head>
@@ -614,50 +574,33 @@
 
     <div class="titleRow">
       <h1 class="title">Beat Sheet Pro</h1>
-      <div class="small" id="statusText"></div>
+
+      <div class="headshotWrap" aria-hidden="true">
+        <img class="bpmHeadshot" src="./headshot.png" alt="">
+        <span id="eyeL" class="eyeDot left"></span>
+        <span id="eyeR" class="eyeDot right"></span>
+      </div>
     </div>
 
-    <!-- ✅ Fix #4: ONLY Export, Save, BPM, Hide -->
     <div class="topRow">
       <button id="exportBtn" type="button">Export</button>
       <button id="saveBtn" type="button">Save</button>
 
-      <div class="pill bpmPill">
+      <div class="pill">
         <label>BPM</label>
         <input id="bpm" type="number" min="40" max="240" value="95" />
       </div>
 
       <button id="headerToggle2" class="headerToggleBtn" type="button">Hide</button>
+      <div class="small" id="statusText" style="flex:1 1 auto; text-align:right;"></div>
     </div>
 
-    <!-- ✅ keep head + autosplit, but not in the top row -->
-    <div class="utilityRow">
-      <div class="headshotSlot" aria-hidden="true">
-        <div class="headshotWrap">
-          <img class="bpmHeadshot" src="./headshot.png" alt="">
-          <span id="eyeL" class="eyeDot left"></span>
-          <span id="eyeR" class="eyeDot right"></span>
-        </div>
-      </div>
-
-      <div class="pill">
-        <label>Auto-split</label>
-        <select id="autoSplitMode" style="border:0;outline:none;background:transparent;font-weight:1000;">
-          <option value="syllables">Syllables</option>
-          <option value="words">Words</option>
-          <option value="none">Off</option>
-        </select>
-      </div>
-    </div>
-
-    <!-- ✅ Fix #2: shorter project name + buttons inline -->
     <div class="projRow">
       <select id="projectPicker" class="projSelect">
         <option>Loading…</option>
       </select>
 
-      <input id="projectName" class="projName" type="text" placeholder="Project name…" />
-
+      <button id="editProjectBtn" class="miniBtn" type="button">Edit</button>
       <button id="newProjectBtn" class="miniBtn" type="button">New</button>
       <button id="copyProjectBtn" class="miniBtn" type="button">Copy</button>
       <button id="deleteProjectBtn" class="miniBtn" type="button">Del</button>
@@ -665,16 +608,19 @@
 
     <div class="tabs" id="sectionTabs"></div>
 
-    <!-- ✅ Fix #1: in collapsed mode, only these + Show remain visible -->
+    <!-- ✅ fixed row even when header hidden -->
     <div class="stickyTools">
-      <button id="metroBtn" class="metroBtn">Metronome</button>
-      <button id="recordBtn" class="recordBtn">Record</button>
+      <button id="drum1Btn" class="drumBtn" type="button" aria-label="Drum 1">🥁</button>
+      <button id="drum2Btn" class="drumBtn" type="button" aria-label="Drum 2">🥁</button>
+      <button id="drum3Btn" class="drumBtn" type="button" aria-label="Drum 3">🥁</button>
+      <button id="drum4Btn" class="drumBtn" type="button" aria-label="Drum 4">🥁</button>
+      <button id="recordBtn" class="recordBtn" type="button">Record</button>
     </div>
 
     <div class="miniCard">
-      <div class="miniTop">
-        <div class="miniTitle">Recording</div>
-        <div class="miniValue" id="recHint">voice + metronome</div>
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;">
+        <div style="font-size:11px;font-weight:1000;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;">Recording</div>
+        <div id="recHint" style="font-size:13px;font-weight:1000;max-width:65%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">voice + metronome</div>
       </div>
 
       <input id="recordName" class="wideInput" type="text" placeholder="Recording name…" />
@@ -703,7 +649,7 @@
   (function(){
     const repo = (location.pathname.split("/").filter(Boolean)[0] || "");
     const base = repo ? ("/" + repo) : "";
-    const v = "SHARED_20260214_EXPORTHTML_FIXES"; // ✅ bump to force refresh
+    const v = "SHARED_20260214_DRUMS4_FIXEDROW_NO_AUTOSPLIT_UI";
 
     const man = document.getElementById("appManifest");
     if(man) man.href = base + "/manifest.webmanifest?v=" + encodeURIComponent(v);
