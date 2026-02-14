@@ -58,6 +58,33 @@
   color:#111;
   margin:6px 2px 10px;
 }
+/* ✅ In hide mode, let the pager use the full screen width */
+body.headerCollapsed main{
+  padding:0 !important;
+}
+
+/* (optional) remove extra outer spacing so pages feel exact */
+body.headerCollapsed #bars{
+  gap:0 !important;
+}
+
+/* ✅ Stronger snap behavior */
+.pager{
+  width:100%;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  scroll-padding-left: 0px;
+  scroll-padding-right: 0px;
+}
+
+.page{
+  flex: 0 0 100%;
+  width: 100%;
+  max-width: 100%;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  overflow-x: hidden; /* prevents inner content from widening the page */
+}
 
     *{ box-sizing:border-box; }
     body{
