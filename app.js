@@ -1182,19 +1182,19 @@ document.addEventListener("selectionchange", ()=>{
 
 /***********************
 ✅ INFINITE HORIZONTAL PAGES (cards pager) — hide mode only
-***********************/
-/***********************
-✅ INFINITE HORIZONTAL PAGES (cards pager) — hide mode only
-✅ FIXED: snap + exact page width
+✅ FIXED: no duplicate listeners, snap is deterministic, resize handler doesn't stack
 ***********************/
 let pagesScrollHandler = null;
 let pagesSnapHandler = null;
-let pagesCopyWidth = 0;
-let pageViewportW = 0;
+let pagesResizeHandler = null;
+
+let pagesCopyWidth = 0;   // width of ONE full copy (one .pageGroup)
+let pageViewportW = 0;    // width of ONE page inside a copy
 let snapTimer = null;
 
 function teardownInfinitePages(pagerEl){
   if(!pagerEl) return;
+
   if(pagesScrollHandler){
     pagerEl.removeEventListener("scroll", pagesScrollHandler);
     pagesScrollHandler = null;
@@ -1203,7 +1203,13 @@ function teardownInfinitePages(pagerEl){
     pagerEl.removeEventListener("scroll", pagesSnapHandler);
     pagesSnapHandler = null;
   }
+  if(pagesResizeHandler){
+    window.removeEventListener("resize", pagesResizeHandler);
+    pagesResizeHandler = null;
+  }
+
   if(snapTimer){ clearTimeout(snapTimer); snapTimer = null; }
+
   pagesCopyWidth = 0;
   pageViewportW = 0;
 }
@@ -1224,87 +1230,99 @@ function measurePager(pagerEl){
   pagesCopyWidth = pageViewportW * PAGE_ORDER.length;
 }
 
-
-
 function setupInfinitePages(pagerEl){
   if(!pagerEl) return;
-  if(!isCollapsed()) { teardownInfinitePages(pagerEl); return; }
+
+  // only active in hide/collapsed mode
+  if(!isCollapsed()){
+    teardownInfinitePages(pagerEl);
+    return;
+  }
 
   requestAnimationFrame(()=>{
     measurePager(pagerEl);
-    if(!pagesCopyWidth) return;
+    if(!pagesCopyWidth || !pageViewportW) return;
+
+    const groups = pagerEl.querySelectorAll(".pageGroup");
+    const midStart = (groups[1]?.offsetLeft) || pagesCopyWidth;
 
     // start at the middle copy
-    const midStart = (pagerEl.querySelectorAll(".pageGroup")[1]?.offsetLeft) || pagesCopyWidth;
-pagerEl.scrollLeft = midStart;
+    pagerEl.scrollLeft = midStart;
 
+    // ✅ keep scroll position near the middle copy (true infinite feel)
+    pagesScrollHandler = ()=>{
+      if(!pagesCopyWidth) return;
 
-   // ✅ infinite loop correction (don’t let it drift too far)
-pagesScrollHandler = ()=>{
-  if(!pagesCopyWidth) return;
+      // (re-read midStart in case layout shifts)
+      const gs = pagerEl.querySelectorAll(".pageGroup");
+      const midS = (gs[1]?.offsetLeft) || pagesCopyWidth;
 
-  const groups = pagerEl.querySelectorAll(".pageGroup");
-  const midStart = (groups[1]?.offsetLeft) || pagesCopyWidth;
+      const x = pagerEl.scrollLeft;
 
-  const x = pagerEl.scrollLeft;
-
-  // keep scroll position near the middle copy
-  if(x < midStart - pagesCopyWidth * 0.25){
-    pagerEl.scrollLeft = x + pagesCopyWidth;
-    return;
-  }
-  if(x > midStart + pagesCopyWidth * 1.25){
-    pagerEl.scrollLeft = x - pagesCopyWidth;
-    return;
-  }
-};
-pagerEl.addEventListener("scroll", pagesScrollHandler, { passive:true });
-
+      // If user drifts into left third -> jump forward one full copy
+      if(x < midS - (pagesCopyWidth * 0.5)){
+        pagerEl.scrollLeft = x + pagesCopyWidth;
+        return;
+      }
+      // If user drifts into right third -> jump backward one full copy
+      if(x > midS + (pagesCopyWidth * 0.5)){
+        pagerEl.scrollLeft = x - pagesCopyWidth;
+        return;
+      }
+    };
     pagerEl.addEventListener("scroll", pagesScrollHandler, { passive:true });
 
-    // ✅ hard snap after swipe/scroll ends (works even when browsers are flaky)
+    // ✅ snap after swipe ends (always snaps inside middle copy)
     pagesSnapHandler = ()=>{
       if(!pagesCopyWidth || !pageViewportW) return;
 
       if(snapTimer) clearTimeout(snapTimer);
       snapTimer = setTimeout(()=>{
-      const len = PAGE_ORDER.length;
+        const gs = pagerEl.querySelectorAll(".pageGroup");
+        const midS = (gs[1]?.offsetLeft) || pagesCopyWidth;
 
-// left edge of the MIDDLE copy (group #2)
-const midStart = (pagerEl.querySelectorAll(".pageGroup")[1]?.offsetLeft) || pagesCopyWidth;
+        const x = pagerEl.scrollLeft;
+        const rel = ((x - midS) % pagesCopyWidth + pagesCopyWidth) % pagesCopyWidth;
 
-const x = pagerEl.scrollLeft;
+        let idx = Math.round(rel / pageViewportW);
+        if(idx < 0) idx = 0;
+        if(idx > PAGE_ORDER.length - 1) idx = PAGE_ORDER.length - 1;
 
-// position inside the middle copy (0..pagesCopyWidth)
-const rel = ((x - midStart) % pagesCopyWidth + pagesCopyWidth) % pagesCopyWidth;
-
-// nearest page index
-let idx = Math.round(rel / pageViewportW);
-if(idx < 0) idx = 0;
-if(idx > len - 1) idx = len - 1;
-
-// snap EXACTLY to that page in the middle copy
-const snapped = Math.round(midStart + (idx * pageViewportW));
-pagerEl.scrollTo({ left: snapped, behavior: "auto" });
-
-
+        const snapped = Math.round(midS + (idx * pageViewportW));
+        pagerEl.scrollTo({ left: snapped, behavior: "auto" });
       }, 90);
     };
     pagerEl.addEventListener("scroll", pagesSnapHandler, { passive:true });
 
-    // ✅ re-measure on resize so snapping stays perfect
-    window.addEventListener("resize", ()=>{
+    // ✅ one resize listener (does NOT stack on rerenders)
+    pagesResizeHandler = ()=>{
       if(!isCollapsed()) return;
-      const oldW = pageViewportW;
-      measurePager(pagerEl);
-      if(!pageViewportW || !oldW) return;
+      if(!pagerEl.isConnected) return;
 
-      // keep the current page position proportional
+      const oldCopy = pagesCopyWidth;
+      const oldPage = pageViewportW;
+      if(!oldCopy || !oldPage) return;
+
+      const gs = pagerEl.querySelectorAll(".pageGroup");
+      const oldMid = (gs[1]?.offsetLeft) || oldCopy;
+
+      // what page were we closest to (based on old sizes)?
       const x = pagerEl.scrollLeft;
-      const relOld = x % (oldW * PAGE_ORDER.length);
-      const pageIdx = Math.round(relOld / oldW);
-      pagerEl.scrollLeft = pagesCopyWidth + pageIdx * pageViewportW;
-    }, { passive:true });
+      const rel = ((x - oldMid) % oldCopy + oldCopy) % oldCopy;
+      let idx = Math.round(rel / oldPage);
+      if(idx < 0) idx = 0;
+      if(idx > PAGE_ORDER.length - 1) idx = PAGE_ORDER.length - 1;
+
+      // re-measure new sizes
+      measurePager(pagerEl);
+      if(!pagesCopyWidth || !pageViewportW) return;
+
+      const gs2 = pagerEl.querySelectorAll(".pageGroup");
+      const newMid = (gs2[1]?.offsetLeft) || pagesCopyWidth;
+
+      pagerEl.scrollLeft = newMid + (idx * pageViewportW);
+    };
+    window.addEventListener("resize", pagesResizeHandler, { passive:true });
   });
 }
 
@@ -1316,10 +1334,13 @@ function scrollPagerToSection(pagerEl, key){
   const idx = PAGE_ORDER.indexOf(key);
   if(idx < 0) return;
 
-  const target = pagesCopyWidth + (idx * pageViewportW); // middle copy + index
+  // middle copy start is pagesCopyWidth (or group[1].offsetLeft)
+  const groups = pagerEl.querySelectorAll(".pageGroup");
+  const midStart = (groups[1]?.offsetLeft) || pagesCopyWidth;
+
+  const target = midStart + (idx * pageViewportW);
   pagerEl.scrollTo({ left: target, behavior: "smooth" });
 }
-
 
 /***********************
 ✅ tabs rendering (keep existing behavior)
@@ -1529,35 +1550,31 @@ function renderBars(){
       fullTa.addEventListener("focus", refresh);
     }
 
-    // infinite loop setup
+    // infinite loop setup (clean + deterministic)
     teardownInfinitePages(pager);
     setupInfinitePages(pager);
 
-    // after width is known, snap to active section (middle copy)
-   requestAnimationFrame(()=>{
-  // ✅ DO NOT override pagesCopyWidth with scrollWidth
-  // setupInfinitePages already measured correctly using viewport width
-  scrollPagerToSection(pager, p.activeSection || "verse1");
-});
+    // snap to active section after measure
+    requestAnimationFrame(()=>{
+      scrollPagerToSection(pager, p.activeSection || "verse1");
+    });
 
+    // when user swipes, update activeSection based on nearest page
+    pager.addEventListener("scroll", ()=>{
+      if(!pagesCopyWidth || !pageViewportW) return;
 
-    // when user swipes, update activeSection based on nearest page (optional but helps state)
-  pager.addEventListener("scroll", ()=>{
-  if(!pagesCopyWidth || !pageViewportW) return;
+      const groups = pager.querySelectorAll(".pageGroup");
+      const midStart = (groups[1]?.offsetLeft) || pagesCopyWidth;
 
-  const x = pager.scrollLeft - pagesCopyWidth; // relative to middle copy
-  const idx = Math.round(x / pageViewportW);
+      const rel = ((pager.scrollLeft - midStart) % pagesCopyWidth + pagesCopyWidth) % pagesCopyWidth;
+      const idx = Math.round(rel / pageViewportW);
+      const key = PAGE_ORDER[Math.max(0, Math.min(PAGE_ORDER.length-1, idx))];
 
-  const key = PAGE_ORDER[
-    (idx % PAGE_ORDER.length + PAGE_ORDER.length) % PAGE_ORDER.length
-  ];
-
-  if(key && key !== p.activeSection){
-    p.activeSection = key;
-    touchProject(p);
-  }
-}, { passive:true });
-
+      if(key && key !== p.activeSection){
+        p.activeSection = key;
+        touchProject(p);
+      }
+    }, { passive:true });
 
     return;
   }
