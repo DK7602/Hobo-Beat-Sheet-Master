@@ -1,4 +1,4 @@
-/* Beat Sheet Pro - app.js (FULL REPLACE v_DRUMS4_FIXEDROW_NO_AUTOSPLIT_UI) */
+/* Beat Sheet Pro - app.js (FULL REPLACE v_DRUMS5_ICONPROJ_INF_TABS) */
 (() => {
 "use strict";
 
@@ -22,7 +22,7 @@ const els = {
   saveBtn: need("saveBtn"),
   bpm: need("bpm"),
 
-  // ✅ drums (metronome patterns)
+  // drums
   drum1Btn: need("drum1Btn"),
   drum2Btn: need("drum2Btn"),
   drum3Btn: need("drum3Btn"),
@@ -178,9 +178,13 @@ function setHeaderCollapsed(isCollapsed){
   if(els.headerToggle)  els.headerToggle.textContent  = isCollapsed ? "Show" : "Hide";
   if(els.headerToggle2) els.headerToggle2.textContent = isCollapsed ? "Show" : "Hide";
   saveHeaderCollapsed(!!isCollapsed);
+
   updateDockForKeyboard();
   if(isCollapsed) stopEyePulse();
   else startEyePulseFromBpm();
+
+  // ✅ re-render tabs so infinite-scroll mode applies only when hidden
+  renderTabs();
 }
 els.headerToggle?.addEventListener("click", ()=>{
   const collapsed = document.body.classList.contains("headerCollapsed");
@@ -267,7 +271,7 @@ function syllGlowClass(n){
   return "red";
 }
 
-// ---------- beat splitting (AUTO ALWAYS ON; manual via /) ----------
+// ---------- beat splitting ----------
 function splitBySlashes(text){
   const parts = (text||"").split("/").map(s=>s.trim());
   return [parts[0]||"", parts[1]||"", parts[2]||"", parts[3]||""];
@@ -375,7 +379,7 @@ function autoSplitSyllablesClean(text){
 }
 function computeBeats(text){
   if((text||"").includes("/")) return splitBySlashes(text);
-  return autoSplitSyllablesClean(text); // ✅ always on
+  return autoSplitSyllablesClean(text);
 }
 
 // ---------- rhymes ----------
@@ -443,7 +447,7 @@ function renderRhymes(words){
     .join("");
 }
 
-// ✅ MOBILE-PROOF rhyme insert
+// rhyme insert
 document.addEventListener("click", (e)=>{
   const chip = e.target.closest(".rhymeChip");
   if(!chip) return;
@@ -703,16 +707,16 @@ function flashBeats(beatInBar){
 }
 
 function drumButtons(){
-  return [
-    els.drum1Btn, els.drum2Btn, els.drum3Btn, els.drum4Btn
-  ].filter(Boolean);
+  return [els.drum1Btn, els.drum2Btn, els.drum3Btn, els.drum4Btn].filter(Boolean);
 }
+
+/* ✅ FIX: only ACTIVE drum turns black */
 function updateDrumButtonsUI(){
   const btns = drumButtons();
   btns.forEach((b, i)=>{
-    b.classList.remove("on","active");
-    if(metroOn) b.classList.add("on");
-    if(metroOn && activeDrum === (i+1)) b.classList.add("active");
+    b.classList.remove("active","running");
+    if(metroOn) b.classList.add("running");          // subtle outline/halo
+    if(metroOn && activeDrum === (i+1)) b.classList.add("active"); // ONLY this one black
   });
 }
 
@@ -734,20 +738,16 @@ function startMetronome(){
     const step16 = metroBeat16 % 16;
     const beatInBar = Math.floor(step16 / 4);
 
-    // ✅ 4 common rap patterns (closed hats, kick, snare, rim)
     if(activeDrum === 1){
-      // Basic: hats 16ths, kick 1&3, snare 2&4
       playHat();
       if(step16 === 0 || step16 === 8) playKick();
       if(step16 === 4 || step16 === 12) playSnare();
     }else if(activeDrum === 2){
-      // Boom-bap: hats 8ths, kick syncopation, rim accents
       if(step16 % 2 === 0) playHat();
       if(step16 === 0 || step16 === 6 || step16 === 10 || step16 === 14) playKick();
       if(step16 === 4 || step16 === 12) playSnare();
       if(step16 === 2 || step16 === 10) playRim();
     }else if(activeDrum === 3){
-      // Trap: hats 16ths + quick doubles, kick sync, rim late
       const t = audioCtx.currentTime;
       playHat(t);
       if(step16 === 3 || step16 === 7 || step16 === 11 || step16 === 15){
@@ -757,7 +757,6 @@ function startMetronome(){
       if(step16 === 4 || step16 === 12) playSnare();
       if(step16 === 14) playRim();
     }else{
-      // West coast bounce: hats 16ths, kick pocket, rim on upbeat
       playHat();
       if(step16 === 0 || step16 === 8 || step16 === 11 || step16 === 15) playKick();
       if(step16 === 4 || step16 === 12) playSnare();
@@ -780,22 +779,17 @@ function stopMetronome(){
 }
 
 function handleDrumPress(which){
-  // if off -> start on that drum
   if(!metroOn){
     activeDrum = which;
     startMetronome();
     showToast(`Drum ${which}`);
     return;
   }
-
-  // if on and same -> stop
   if(metroOn && activeDrum === which){
     stopMetronome();
     showToast("Stop");
     return;
   }
-
-  // if on and different -> switch pattern (keep running)
   activeDrum = which;
   updateDrumButtonsUI();
   showToast(`Drum ${which}`);
@@ -1174,34 +1168,108 @@ document.addEventListener("selectionchange", ()=>{
   updateRhymesFromFullCaret(ta);
 }, { passive:true });
 
+// ---------- ✅ Infinite tab scrolling (only when headerCollapsed) ----------
+let tabsScrollHandler = null;
+let tabsCopyWidth = 0;
+
+function teardownInfiniteTabs(){
+  const el = els.sectionTabs;
+  if(!el) return;
+  if(tabsScrollHandler){
+    el.removeEventListener("scroll", tabsScrollHandler);
+    tabsScrollHandler = null;
+  }
+  tabsCopyWidth = 0;
+}
+
+function setupInfiniteTabs(){
+  const el = els.sectionTabs;
+  if(!el) return;
+
+  const isCollapsed = document.body.classList.contains("headerCollapsed");
+  if(!isCollapsed) { teardownInfiniteTabs(); return; }
+
+  // measure width of the first copy group
+  const firstGroup = el.querySelector('[data-tabs-group="1"]');
+  if(!firstGroup) return;
+
+  const w = firstGroup.scrollWidth || firstGroup.getBoundingClientRect().width || 0;
+  tabsCopyWidth = Math.max(0, w);
+
+  if(!tabsCopyWidth) return;
+
+  // jump to middle copy so it feels infinite immediately
+  requestAnimationFrame(()=>{
+    el.scrollLeft = tabsCopyWidth; // start at group 2
+  });
+
+  // loop logic
+  tabsScrollHandler = ()=>{
+    if(!tabsCopyWidth) return;
+    const x = el.scrollLeft;
+
+    // if drifting too far left, jump forward by one copy
+    if(x < tabsCopyWidth * 0.25){
+      el.scrollLeft = x + tabsCopyWidth;
+      return;
+    }
+    // if drifting too far right, jump back by one copy
+    if(x > tabsCopyWidth * 1.75){
+      el.scrollLeft = x - tabsCopyWidth;
+      return;
+    }
+  };
+
+  el.addEventListener("scroll", tabsScrollHandler, { passive:true });
+}
+
 // ---------- rendering ----------
 function renderTabs(){
   const p = getActiveProject();
+  const isCollapsed = document.body.classList.contains("headerCollapsed");
+
+  teardownInfiniteTabs();
   els.sectionTabs.innerHTML = "";
 
-  for(const s of SECTION_DEFS){
+  const items = [
+    ...SECTION_DEFS.map(s => ({ key:s.key, title:s.title })),
+    { key:"full", title:"Full" }
+  ];
+
+  function addTabButton(it){
     const btn = document.createElement("button");
-    btn.type="button";
-    btn.className="tab" + (p.activeSection === s.key ? " active" : "");
-    btn.textContent=s.title;
+    btn.type = "button";
+    btn.className = "tab" + (p.activeSection === it.key ? " active" : "");
+    btn.textContent = it.title;
+    btn.dataset.key = it.key;
     btn.addEventListener("click", ()=>{
-      p.activeSection = s.key;
+      p.activeSection = it.key;
       touchProject(p);
       renderAll();
     });
-    els.sectionTabs.appendChild(btn);
+    return btn;
   }
 
-  const fullBtn = document.createElement("button");
-  fullBtn.type = "button";
-  fullBtn.className = "tab" + (p.activeSection === "full" ? " active" : "");
-  fullBtn.textContent = "Full";
-  fullBtn.addEventListener("click", ()=>{
-    p.activeSection = "full";
-    touchProject(p);
-    renderAll();
-  });
-  els.sectionTabs.appendChild(fullBtn);
+  if(!isCollapsed){
+    // normal (single list)
+    for(const it of items) els.sectionTabs.appendChild(addTabButton(it));
+    return;
+  }
+
+  // ✅ collapsed: render 3 copies for infinite scroll
+  for(let g=1; g<=3; g++){
+    const group = document.createElement("div");
+    group.style.display = "flex";
+    group.style.gap = "8px";
+    group.style.flex = "0 0 auto";
+    group.dataset.tabsGroup = String(g);
+
+    for(const it of items) group.appendChild(addTabButton(it));
+
+    els.sectionTabs.appendChild(group);
+  }
+
+  setupInfiniteTabs();
 }
 
 function renderBars(){
@@ -1351,7 +1419,7 @@ function renderAll(){
   else startEyePulseFromBpm();
 }
 
-// ---------- EXPORT (downloads 2 HTML files) ----------
+// ---------- EXPORT ----------
 function safeFileName(name){
   const base = (name || "Beat Sheet Pro Export").trim() || "Beat Sheet Pro Export";
   return base.replace(/[^\w\s.-]+/g,"").replace(/\s+/g," ").trim();
@@ -1479,7 +1547,7 @@ els.projectPicker?.addEventListener("change", ()=>{
   }
 });
 
-// ✅ project rename via Edit button (prompt)
+// rename via Edit button (prompt)
 els.editProjectBtn?.addEventListener("click", ()=>{
   const p = getActiveProject();
   const cur = (p.name || "").trim();
@@ -1503,7 +1571,7 @@ els.bpm?.addEventListener("change", ()=>{
   els.bpm.value = p.bpm;
   touchProject(p);
   if(metroOn){
-    startMetronome(); // restart timing
+    startMetronome();
   }
   if(metroOn || recording) startEyePulseFromBpm();
 });
