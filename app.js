@@ -1209,11 +1209,21 @@ function teardownInfinitePages(pagerEl){
 }
 
 function measurePager(pagerEl){
-  // ✅ use clientWidth (more stable on mobile than getBoundingClientRect)
+  // ✅ measure the REAL width of one full copy (the middle group)
+  const groups = pagerEl.querySelectorAll(".pageGroup");
+  const mid = groups[1] || groups[0];
+  if(mid){
+    pagesCopyWidth = Math.round(mid.getBoundingClientRect().width);
+    pageViewportW = Math.round(pagesCopyWidth / PAGE_ORDER.length);
+    return;
+  }
+
+  // fallback
   const w = Math.round(pagerEl.clientWidth || pagerEl.getBoundingClientRect().width || 0);
   pageViewportW = Math.max(0, w);
   pagesCopyWidth = pageViewportW * PAGE_ORDER.length;
 }
+
 
 
 function setupInfinitePages(pagerEl){
@@ -1225,22 +1235,31 @@ function setupInfinitePages(pagerEl){
     if(!pagesCopyWidth) return;
 
     // start at the middle copy
-    pagerEl.scrollLeft = pagesCopyWidth;
+    const midStart = (pagerEl.querySelectorAll(".pageGroup")[1]?.offsetLeft) || pagesCopyWidth;
+pagerEl.scrollLeft = midStart;
 
-    // ✅ infinite loop correction (don’t let it drift too far)
-    pagesScrollHandler = ()=>{
-      if(!pagesCopyWidth) return;
-      const x = pagerEl.scrollLeft;
 
-      if(x < pagesCopyWidth * 0.25){
-        pagerEl.scrollLeft = x + pagesCopyWidth;
-        return;
-      }
-      if(x > pagesCopyWidth * 1.75){
-        pagerEl.scrollLeft = x - pagesCopyWidth;
-        return;
-      }
-    };
+   // ✅ infinite loop correction (don’t let it drift too far)
+pagesScrollHandler = ()=>{
+  if(!pagesCopyWidth) return;
+
+  const groups = pagerEl.querySelectorAll(".pageGroup");
+  const midStart = (groups[1]?.offsetLeft) || pagesCopyWidth;
+
+  const x = pagerEl.scrollLeft;
+
+  // keep scroll position near the middle copy
+  if(x < midStart - pagesCopyWidth * 0.25){
+    pagerEl.scrollLeft = x + pagesCopyWidth;
+    return;
+  }
+  if(x > midStart + pagesCopyWidth * 1.25){
+    pagerEl.scrollLeft = x - pagesCopyWidth;
+    return;
+  }
+};
+pagerEl.addEventListener("scroll", pagesScrollHandler, { passive:true });
+
     pagerEl.addEventListener("scroll", pagesScrollHandler, { passive:true });
 
     // ✅ hard snap after swipe/scroll ends (works even when browsers are flaky)
@@ -1249,23 +1268,25 @@ function setupInfinitePages(pagerEl){
 
       if(snapTimer) clearTimeout(snapTimer);
       snapTimer = setTimeout(()=>{
-        const x = pagerEl.scrollLeft;
+      const len = PAGE_ORDER.length;
 
-        // nearest page in the *current* group you’re viewing
-       const len = PAGE_ORDER.length;
+// left edge of the MIDDLE copy (group #2)
+const midStart = (pagerEl.querySelectorAll(".pageGroup")[1]?.offsetLeft) || pagesCopyWidth;
 
-// make rel ALWAYS positive (android can be weird with %)
-const rel = ((x % pagesCopyWidth) + pagesCopyWidth) % pagesCopyWidth;
+const x = pagerEl.scrollLeft;
 
-// pick nearest page
+// position inside the middle copy (0..pagesCopyWidth)
+const rel = ((x - midStart) % pagesCopyWidth + pagesCopyWidth) % pagesCopyWidth;
+
+// nearest page index
 let idx = Math.round(rel / pageViewportW);
-
-// clamp idx so it can NEVER become len
 if(idx < 0) idx = 0;
 if(idx > len - 1) idx = len - 1;
 
-const snapped = Math.round((x - rel) + (idx * pageViewportW));
-pagerEl.scrollTo({ left: snapped, behavior: "smooth" });
+// snap EXACTLY to that page in the middle copy
+const snapped = Math.round(midStart + (idx * pageViewportW));
+pagerEl.scrollTo({ left: snapped, behavior: "auto" });
+
 
       }, 90);
     };
