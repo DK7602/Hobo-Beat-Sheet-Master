@@ -1,4 +1,4 @@
-<!-- index.html (FULL REPLACE v_DRUMS4_FIXEDROW_NO_AUTOSPLIT_UI) -->
+<!-- index.html (FULL REPLACE v_DRUMS5_ICONPROJ_INF_TABS) -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -49,7 +49,7 @@
     body.fullMode header{ max-height:16vh; }
     body.fullMode .miniCard{ display:none; }
 
-    /* ✅ COLLAPSED HEADER: only Show + Drum row + Recordings mini hidden */
+    /* ✅ COLLAPSED HEADER */
     body.headerCollapsed header{
       max-height:none;
       overflow:hidden;
@@ -90,7 +90,7 @@
     .topRow{
       display:flex;
       gap:8px;
-      flex-wrap:wrap; /* wraps instead of scrolling */
+      flex-wrap:wrap;
       align-items:center;
       margin-bottom:8px;
     }
@@ -172,7 +172,7 @@
       box-shadow: 0 0 10px 4px rgba(255, 43, 43, .55);
     }
 
-    /* ✅ only tabs can scroll horizontally */
+    /* ✅ tabs can scroll horizontally */
     .tabs{
       display:flex;
       gap:8px;
@@ -181,6 +181,7 @@
       -webkit-overflow-scrolling: touch;
       padding-bottom:2px;
       margin-bottom:8px;
+      scroll-behavior:auto;
     }
     .tab{
       flex:0 0 auto;
@@ -198,7 +199,7 @@
       border-color:#111;
     }
 
-    /* ✅ fixed drum+record row (no scrolling) */
+    /* ✅ fixed drum+record row */
     .stickyTools{
       display:grid;
       grid-template-columns: repeat(5, 1fr);
@@ -217,8 +218,16 @@
       font-size:18px;
       line-height:1;
     }
-    .drumBtn.on{ background:#111; color:#fff; border-color:#111; }
-    .drumBtn.active{ box-shadow: 0 0 0 4px rgba(0,0,0,.12); }
+    /* ✅ only ACTIVE drum is black */
+    .drumBtn.active{
+      background:#111;
+      color:#fff;
+      border-color:#111;
+    }
+    /* optional: show metronome running without turning all black */
+    .drumBtn.running{
+      box-shadow: 0 0 0 4px rgba(0,0,0,.08);
+    }
 
     .recordBtn{
       display:flex; align-items:center; justify-content:center;
@@ -544,24 +553,40 @@
       white-space:nowrap;
     }
 
-    /* ✅ Projects row fixed, no scroll, includes Edit button (no name input) */
+    /* ✅ Projects row: ONE LINE, FIXED, NO HORIZONTAL SCROLL */
     .projRow{
       display:flex;
       gap:8px;
-      flex-wrap:wrap;
       align-items:center;
       width:100%;
       margin-bottom:8px;
+
+      flex-wrap:nowrap;
+      overflow:hidden;     /* prevents sideways scroll */
+      min-width:0;
     }
+    /* ✅ shorten project select */
     .projSelect{
-      min-width:160px;
       font-weight:1000;
-      flex:1 1 220px;
+      flex:1 1 auto;
+      min-width:0;
+      max-width:220px;     /* shorten box */
+      padding-right:8px;
     }
-    .miniBtn{
-      padding:9px 11px;
-      border-radius:14px;
+    /* ✅ circle icon buttons */
+    .projIconBtn{
+      width:38px;
+      height:38px;
+      padding:0;
+      border-radius:999px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:16px;
+      font-weight:1000;
+      line-height:1;
       flex:0 0 auto;
+      box-shadow:0 6px 14px rgba(0,0,0,.08);
     }
   </style>
 </head>
@@ -595,20 +620,20 @@
       <div class="small" id="statusText" style="flex:1 1 auto; text-align:right;"></div>
     </div>
 
+    <!-- ✅ ONE LINE PROJECT ROW -->
     <div class="projRow">
-      <select id="projectPicker" class="projSelect">
+      <select id="projectPicker" class="projSelect" aria-label="Project">
         <option>Loading…</option>
       </select>
 
-      <button id="editProjectBtn" class="miniBtn" type="button">Edit</button>
-      <button id="newProjectBtn" class="miniBtn" type="button">New</button>
-      <button id="copyProjectBtn" class="miniBtn" type="button">Copy</button>
-      <button id="deleteProjectBtn" class="miniBtn" type="button">Del</button>
+      <button id="editProjectBtn"   class="projIconBtn" type="button" title="Edit"   aria-label="Edit">✏️</button>
+      <button id="newProjectBtn"    class="projIconBtn" type="button" title="New"    aria-label="New">＋</button>
+      <button id="copyProjectBtn"   class="projIconBtn" type="button" title="Copy"   aria-label="Copy">C</button>
+      <button id="deleteProjectBtn" class="projIconBtn" type="button" title="Delete" aria-label="Delete">✕</button>
     </div>
 
     <div class="tabs" id="sectionTabs"></div>
 
-    <!-- ✅ fixed row even when header hidden -->
     <div class="stickyTools">
       <button id="drum1Btn" class="drumBtn" type="button" aria-label="Drum 1">🥁</button>
       <button id="drum2Btn" class="drumBtn" type="button" aria-label="Drum 2">🥁</button>
@@ -649,7 +674,7 @@
   (function(){
     const repo = (location.pathname.split("/").filter(Boolean)[0] || "");
     const base = repo ? ("/" + repo) : "";
-    const v = "SHARED_20260214_DRUMS4_FIXEDROW_NO_AUTOSPLIT_UI";
+    const v = "SHARED_20260214_DRUMS5_ICONPROJ_INF_TABS";
 
     const man = document.getElementById("appManifest");
     if(man) man.href = base + "/manifest.webmanifest?v=" + encodeURIComponent(v);
