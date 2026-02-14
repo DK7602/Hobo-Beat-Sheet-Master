@@ -1209,11 +1209,12 @@ function teardownInfinitePages(pagerEl){
 }
 
 function measurePager(pagerEl){
-  // ✅ exact visible width = 1 page
-  const w = Math.round(pagerEl.getBoundingClientRect().width);
+  // ✅ use clientWidth (more stable on mobile than getBoundingClientRect)
+  const w = Math.round(pagerEl.clientWidth || pagerEl.getBoundingClientRect().width || 0);
   pageViewportW = Math.max(0, w);
-  pagesCopyWidth = pageViewportW * PAGE_ORDER.length; // ✅ one group width
+  pagesCopyWidth = pageViewportW * PAGE_ORDER.length;
 }
+
 
 function setupInfinitePages(pagerEl){
   if(!pagerEl) return;
@@ -1263,10 +1264,9 @@ let idx = Math.round(rel / pageViewportW);
 if(idx < 0) idx = 0;
 if(idx > len - 1) idx = len - 1;
 
-const snapped = (x - rel) + (idx * pageViewportW);
+const snapped = Math.round((x - rel) + (idx * pageViewportW));
+pagerEl.scrollTo({ left: snapped, behavior: "smooth" });
 
-
-        pagerEl.scrollTo({ left: snapped, behavior: "smooth" });
       }, 90);
     };
     pagerEl.addEventListener("scroll", pagesSnapHandler, { passive:true });
