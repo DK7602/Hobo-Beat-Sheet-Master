@@ -1,4 +1,4 @@
-/* Beat Sheet Pro - app.js (FULL REPLACE v_EXPORT_HTML_2FILES) */
+/* Beat Sheet Pro - app.js (FULL REPLACE v_EXPORT_HTML_2FILES_FIXES) */
 (() => {
 "use strict";
 
@@ -22,7 +22,6 @@ const els = {
   saveBtn: need("saveBtn"),
   bpm: need("bpm"),
   metroBtn: need("metroBtn"),
-  highlightMode: need("highlightMode"),
   autoSplitMode: need("autoSplitMode"),
 
   // merged header projects UI
@@ -523,7 +522,7 @@ function newProject(name=""){
     updatedAt: nowISO(),
     activeSection: "verse1",
     bpm: 95,
-    highlightMode: "focused",
+    highlightMode: "all",          // ✅ Fix #3: always ALL
     autoSplitMode: "syllables",
     recordings: [],
     sections: blankSections(),
@@ -555,7 +554,10 @@ function repairProject(p){
   if(!p.activeSection) p.activeSection = "verse1";
   if(!Array.isArray(p.recordings)) p.recordings = [];
   if(!p.bpm) p.bpm = 95;
-  if(!p.highlightMode) p.highlightMode = "focused";
+
+  // ✅ Fix #3: force all (kills focused UI + outline behavior)
+  p.highlightMode = "all";
+
   if(!p.autoSplitMode) p.autoSplitMode = "syllables";
   return p;
 }
@@ -592,7 +594,7 @@ function renderProjectPicker(){
   }).join("");
 }
 
-// ---------- metronome + recording (unchanged core) ----------
+// ---------- metronome + recording ----------
 let audioCtx = null;
 let metroGain = null;
 let recordDest = null;
@@ -677,13 +679,10 @@ function playHat(){
   noise.stop(t + 0.04);
 }
 
-let focusedBarIdx = 0;
+/* ✅ Fix #3: highlight ALWAYS ALL — no focused bar concept */
 function flashBeats(beatInBar){
-  const p = getActiveProject();
-  const highlight = p.highlightMode || "focused";
   const barEls = document.querySelectorAll(".bar");
-  const targets = (highlight === "all") ? Array.from(barEls) : [barEls[focusedBarIdx] || barEls[0]];
-  targets.forEach(barEl=>{
+  barEls.forEach(barEl=>{
     const beats = barEl?.querySelectorAll(".beat");
     if(!beats || beats.length < 4) return;
     beats.forEach(b=>b.classList.remove("flash"));
@@ -1230,7 +1229,6 @@ function renderBars(){
     }
 
     ta.addEventListener("focus", ()=>{
-      focusedBarIdx = idx;
       refreshRhymesForCaret();
       updateDockForKeyboard();
     });
@@ -1276,8 +1274,13 @@ function renderAll(){
   // header fields
   if(els.projectName) els.projectName.value = p.name || "";
   if(els.bpm) els.bpm.value = p.bpm || 95;
-  if(els.highlightMode) els.highlightMode.value = p.highlightMode || "focused";
   if(els.autoSplitMode) els.autoSplitMode.value = p.autoSplitMode || "syllables";
+
+  // ✅ Fix #3: force persisted highlight to ALL (even for old projects)
+  if(p.highlightMode !== "all"){
+    p.highlightMode = "all";
+    touchProject(p);
+  }
 
   renderProjectPicker();
   renderTabs();
@@ -1447,12 +1450,6 @@ els.bpm?.addEventListener("change", ()=>{
   touchProject(p);
   if(metroOn) startMetronome();
   if(metroOn || recording) startEyePulseFromBpm();
-});
-
-els.highlightMode?.addEventListener("change", ()=>{
-  const p = getActiveProject();
-  p.highlightMode = els.highlightMode.value;
-  touchProject(p);
 });
 
 els.autoSplitMode?.addEventListener("change", ()=>{
