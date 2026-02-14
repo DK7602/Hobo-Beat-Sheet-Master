@@ -1,4 +1,4 @@
-/* Beat Sheet Pro - app.js (FULL REPLACE v_DRUMS5_ICONPROJ_INF_TABS) */
+/* Beat Sheet Pro - app.js (FULL REPLACE v_DRUMS5_ICONPROJ_INF_PAGES) */
 (() => {
 "use strict";
 
@@ -88,22 +88,22 @@ const OLD_HEADER_COLLAPSED_KEY = "beatsheetpro_header_collapsed_v1";
   }catch{}
 })();
 
+/***********************
+✅ SECTIONS (Bridge after Verse 3, before Chorus 3)
+***********************/
 const SECTION_DEFS = [
   { key:"verse1",  title:"Verse 1",  bars:16, extra:4 },
   { key:"chorus1", title:"Chorus 1", bars:12, extra:4 },
   { key:"verse2",  title:"Verse 2",  bars:16, extra:4 },
   { key:"chorus2", title:"Chorus 2", bars:12, extra:4 },
   { key:"verse3",  title:"Verse 3",  bars:16, extra:4 },
-
-  // ✅ Bridge goes here
   { key:"bridge",  title:"Bridge",   bars: 8, extra:4 },
-
-  // ✅ Chorus 3 after Bridge
   { key:"chorus3", title:"Chorus 3", bars:12, extra:4 },
 ];
 
-
 const FULL_ORDER = ["verse1","chorus1","verse2","chorus2","verse3","bridge","chorus3"];
+const PAGE_ORDER = [...FULL_ORDER, "full"]; // ✅ swipe includes FULL page
+
 const FULL_HEADINGS = FULL_ORDER.map(k => (SECTION_DEFS.find(s=>s.key===k)?.title || k).toUpperCase());
 const headingSet = new Set(FULL_HEADINGS);
 
@@ -128,6 +128,9 @@ function escapeHtml(s){
 function clampInt(v,min,max){
   if(Number.isNaN(v)) return min;
   return Math.max(min, Math.min(max, v));
+}
+function isCollapsed(){
+  return document.body.classList.contains("headerCollapsed");
 }
 
 // ---------- headshot eye blink ----------
@@ -178,26 +181,24 @@ function loadHeaderCollapsed(){
 function saveHeaderCollapsed(isCollapsed){
   try{ localStorage.setItem(HEADER_COLLAPSED_KEY, isCollapsed ? "1" : "0"); }catch{}
 }
-function setHeaderCollapsed(isCollapsed){
-  document.body.classList.toggle("headerCollapsed", !!isCollapsed);
-  if(els.headerToggle)  els.headerToggle.textContent  = isCollapsed ? "Show" : "Hide";
-  if(els.headerToggle2) els.headerToggle2.textContent = isCollapsed ? "Show" : "Hide";
-  saveHeaderCollapsed(!!isCollapsed);
+function setHeaderCollapsed(isCol){
+  document.body.classList.toggle("headerCollapsed", !!isCol);
+  if(els.headerToggle)  els.headerToggle.textContent  = isCol ? "Show" : "Hide";
+  if(els.headerToggle2) els.headerToggle2.textContent = isCol ? "Show" : "Hide";
+  saveHeaderCollapsed(!!isCol);
 
   updateDockForKeyboard();
-  if(isCollapsed) stopEyePulse();
+  if(isCol) stopEyePulse();
   else startEyePulseFromBpm();
 
-  // ✅ re-render tabs so infinite-scroll mode applies only when hidden
-  renderTabs();
+  // re-render so pager can swap in/out
+  renderAll();
 }
 els.headerToggle?.addEventListener("click", ()=>{
-  const collapsed = document.body.classList.contains("headerCollapsed");
-  setHeaderCollapsed(!collapsed);
+  setHeaderCollapsed(!isCollapsed());
 });
 els.headerToggle2?.addEventListener("click", ()=>{
-  const collapsed = document.body.classList.contains("headerCollapsed");
-  setHeaderCollapsed(!collapsed);
+  setHeaderCollapsed(!isCollapsed());
 });
 
 // Keep rhyme dock visible above keyboard (Android)
@@ -584,7 +585,9 @@ function renderProjectPicker(){
   }).join("");
 }
 
-// ---------- metronome + recording (4 drum patterns) ----------
+/***********************
+✅ METRONOME / RECORDING (UNCHANGED)
+***********************/
 let audioCtx = null;
 let metroGain = null;
 let recordDest = null;
@@ -720,8 +723,8 @@ function updateDrumButtonsUI(){
   const btns = drumButtons();
   btns.forEach((b, i)=>{
     b.classList.remove("active","running");
-    if(metroOn) b.classList.add("running");          // subtle outline/halo
-    if(metroOn && activeDrum === (i+1)) b.classList.add("active"); // ONLY this one black
+    if(metroOn) b.classList.add("running");
+    if(metroOn && activeDrum === (i+1)) b.classList.add("active");
   });
 }
 
@@ -800,7 +803,9 @@ function handleDrumPress(which){
   showToast(`Drum ${which}`);
 }
 
-// ---------- smooth playback + recording ----------
+/***********************
+✅ PLAYBACK + RECORDINGS (UNCHANGED)
+***********************/
 let currentPlayback = null;
 let currentPlaybackId = null;
 const decodedCache = new Map();
@@ -1091,7 +1096,9 @@ function renderRecordings(){
   }
 }
 
-// ---------- FULL editor ----------
+/***********************
+✅ FULL editor
+***********************/
 function buildFullTextFromProject(p){
   const out = [];
   for(const key of FULL_ORDER){
@@ -1173,67 +1180,71 @@ document.addEventListener("selectionchange", ()=>{
   updateRhymesFromFullCaret(ta);
 }, { passive:true });
 
-// ---------- ✅ Infinite tab scrolling (only when headerCollapsed) ----------
-let tabsScrollHandler = null;
-let tabsCopyWidth = 0;
+/***********************
+✅ INFINITE HORIZONTAL PAGES (cards pager) — hide mode only
+***********************/
+let pagesScrollHandler = null;
+let pagesCopyWidth = 0;
 
-function teardownInfiniteTabs(){
-  const el = els.sectionTabs;
-  if(!el) return;
-  if(tabsScrollHandler){
-    el.removeEventListener("scroll", tabsScrollHandler);
-    tabsScrollHandler = null;
+function teardownInfinitePages(pagerEl){
+  if(!pagerEl) return;
+  if(pagesScrollHandler){
+    pagerEl.removeEventListener("scroll", pagesScrollHandler);
+    pagesScrollHandler = null;
   }
-  tabsCopyWidth = 0;
+  pagesCopyWidth = 0;
 }
 
-function setupInfiniteTabs(){
-  const el = els.sectionTabs;
-  if(!el) return;
+function setupInfinitePages(pagerEl){
+  if(!pagerEl) return;
+  if(!isCollapsed()) { teardownInfinitePages(pagerEl); return; }
 
-  const isCollapsed = document.body.classList.contains("headerCollapsed");
-  if(!isCollapsed) { teardownInfiniteTabs(); return; }
-
-  // measure width of the first copy group
-  const firstGroup = el.querySelector('[data-tabs-group="1"]');
-  if(!firstGroup) return;
-
-  const w = firstGroup.scrollWidth || firstGroup.getBoundingClientRect().width || 0;
-  tabsCopyWidth = Math.max(0, w);
-
-  if(!tabsCopyWidth) return;
-
-  // jump to middle copy so it feels infinite immediately
   requestAnimationFrame(()=>{
-    el.scrollLeft = tabsCopyWidth; // start at group 2
+    const firstGroup = pagerEl.querySelector('[data-pages-group="1"]');
+    if(!firstGroup) return;
+
+    const w = firstGroup.scrollWidth || firstGroup.getBoundingClientRect().width || 0;
+    pagesCopyWidth = Math.max(0, w);
+    if(!pagesCopyWidth) return;
+
+    // start at the middle copy
+    pagerEl.scrollLeft = pagesCopyWidth;
+
+    pagesScrollHandler = ()=>{
+      if(!pagesCopyWidth) return;
+      const x = pagerEl.scrollLeft;
+
+      if(x < pagesCopyWidth * 0.25){
+        pagerEl.scrollLeft = x + pagesCopyWidth;
+        return;
+      }
+      if(x > pagesCopyWidth * 1.75){
+        pagerEl.scrollLeft = x - pagesCopyWidth;
+        return;
+      }
+    };
+
+    pagerEl.addEventListener("scroll", pagesScrollHandler, { passive:true });
   });
-
-  // loop logic
-  tabsScrollHandler = ()=>{
-    if(!tabsCopyWidth) return;
-    const x = el.scrollLeft;
-
-    // if drifting too far left, jump forward by one copy
-    if(x < tabsCopyWidth * 0.25){
-      el.scrollLeft = x + tabsCopyWidth;
-      return;
-    }
-    // if drifting too far right, jump back by one copy
-    if(x > tabsCopyWidth * 1.75){
-      el.scrollLeft = x - tabsCopyWidth;
-      return;
-    }
-  };
-
-  el.addEventListener("scroll", tabsScrollHandler, { passive:true });
 }
 
-// ---------- rendering ----------
+function scrollPagerToSection(pagerEl, key){
+  if(!pagerEl || !pagesCopyWidth) return;
+  const idx = PAGE_ORDER.indexOf(key);
+  if(idx < 0) return;
+
+  // each page is 100% width, so group width divided by page count = one page width
+  const pageW = pagesCopyWidth / PAGE_ORDER.length;
+  const target = pagesCopyWidth + (idx * pageW); // middle copy + index
+  pagerEl.scrollLeft = target;
+}
+
+/***********************
+✅ tabs rendering (keep existing behavior)
+***********************/
 function renderTabs(){
   const p = getActiveProject();
-  const isCollapsed = document.body.classList.contains("headerCollapsed");
-
-  teardownInfiniteTabs();
+  if(!els.sectionTabs) return;
   els.sectionTabs.innerHTML = "";
 
   const items = [
@@ -1241,7 +1252,8 @@ function renderTabs(){
     { key:"full", title:"Full" }
   ];
 
-  function addTabButton(it){
+  // even if hidden by CSS in hide mode, keeping this is fine
+  for(const it of items){
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "tab" + (p.activeSection === it.key ? " active" : "");
@@ -1252,66 +1264,16 @@ function renderTabs(){
       touchProject(p);
       renderAll();
     });
-    return btn;
+    els.sectionTabs.appendChild(btn);
   }
-
-  if(!isCollapsed){
-    // normal (single list)
-    for(const it of items) els.sectionTabs.appendChild(addTabButton(it));
-    return;
-  }
-
-  // ✅ collapsed: render 3 copies for infinite scroll
-  for(let g=1; g<=3; g++){
-    const group = document.createElement("div");
-    group.style.display = "flex";
-    group.style.gap = "8px";
-    group.style.flex = "0 0 auto";
-    group.dataset.tabsGroup = String(g);
-
-    for(const it of items) group.appendChild(addTabButton(it));
-
-    els.sectionTabs.appendChild(group);
-  }
-
-  setupInfiniteTabs();
 }
 
-function renderBars(){
-  const p = getActiveProject();
-
-  if(p.activeSection === "full"){
-    const fullText = buildFullTextFromProject(p);
-    els.bars.innerHTML = `
-      <div class="fullBox">
-        <div class="fullSub">
-          Paste + edit. Rhymes follow the last word on the line above your cursor. Use "/" for manual beat breaks.
-        </div>
-        <textarea id="fullEditor" class="fullEditor" spellcheck="false">${escapeHtml(fullText)}</textarea>
-      </div>
-    `;
-
-    const ta = document.getElementById("fullEditor");
-    let tmr = null;
-
-    const commit = () => applyFullTextToProject(p, ta.value || "");
-    const refresh = () => { updateRhymesFromFullCaret(ta); updateDockForKeyboard(); };
-
-    refresh();
-
-    ta.addEventListener("input", ()=>{
-      if(tmr) clearTimeout(tmr);
-      tmr = setTimeout(commit, 220);
-      refresh();
-    });
-    ta.addEventListener("click", refresh);
-    ta.addEventListener("keyup", refresh);
-    ta.addEventListener("focus", refresh);
-    return;
-  }
-
-  const sec = p.sections[p.activeSection];
-  els.bars.innerHTML = "";
+/***********************
+✅ bar rendering helper for ANY section (used by pager)
+***********************/
+function renderSectionBarsInto(p, sectionKey, mountEl){
+  const sec = p.sections[sectionKey];
+  if(!sec?.bars) return;
 
   sec.bars.forEach((bar, idx)=>{
     const wrap = document.createElement("div");
@@ -1327,12 +1289,12 @@ function renderBars(){
           <div class="barNum">${idx+1}</div>
           <div class="syllPill ${glow}">
             <span class="lbl">Syllables</span>
-            <span class="val" data-syll="${idx}">${n ? n : ""}</span>
+            <span class="val" data-syll="${sectionKey}:${idx}">${n ? n : ""}</span>
           </div>
         </div>
       </div>
 
-      <textarea data-idx="${idx}" placeholder="Type your bar. Optional: use / for beat breaks.">${escapeHtml(bar.text||"")}</textarea>
+      <textarea data-sec="${escapeHtml(sectionKey)}" data-idx="${idx}" placeholder="Type your bar. Optional: use / for beat breaks.">${escapeHtml(bar.text||"")}</textarea>
 
       <div class="beats">
         <div class="beat">${escapeHtml(beats[0]||"")}</div>
@@ -1343,7 +1305,7 @@ function renderBars(){
     `;
 
     const ta = wrap.querySelector("textarea");
-    const syllVal = wrap.querySelector(`[data-syll="${idx}"]`);
+    const syllVal = wrap.querySelector(`[data-syll="${sectionKey}:${idx}"]`);
     const syllPill = wrap.querySelector(".syllPill");
     const beatEls = wrap.querySelectorAll(".beat");
 
@@ -1384,9 +1346,9 @@ function renderBars(){
       const g = syllGlowClass(newN);
       if(g) syllPill.classList.add(g);
 
-      const b = computeBeats(text);
+      const bb = computeBeats(text);
       for(let i=0;i<4;i++){
-        beatEls[i].innerHTML = escapeHtml(b[i]||"");
+        beatEls[i].innerHTML = escapeHtml(bb[i]||"");
       }
 
       refreshRhymesForCaret();
@@ -1395,13 +1357,169 @@ function renderBars(){
     ta.addEventListener("keydown", (e)=>{
       if(e.key === "Enter"){
         e.preventDefault();
-        const next = els.bars.querySelector(`textarea[data-idx="${idx+1}"]`);
+        const next = mountEl.querySelector(`textarea[data-sec="${CSS.escape(sectionKey)}"][data-idx="${idx+1}"]`);
         if(next) next.focus();
       }
     });
 
-    els.bars.appendChild(wrap);
+    mountEl.appendChild(wrap);
   });
+}
+
+/***********************
+✅ renderBars: normal mode = single section
+✅ hide mode = infinite horizontal pager of pages (cards)
+***********************/
+function renderBars(){
+  const p = getActiveProject();
+  if(!els.bars) return;
+
+  // ✅ HIDE MODE: horizontal pager
+  if(isCollapsed()){
+    els.bars.innerHTML = "";
+
+    const pager = document.createElement("div");
+    pager.className = "pager";
+    pager.id = "pagesPager";
+
+    // 3 copies for infinite
+    for(let g=1; g<=3; g++){
+      const group = document.createElement("div");
+      group.className = "pageGroup";
+      group.dataset.pagesGroup = String(g);
+
+      for(const key of PAGE_ORDER){
+        const page = document.createElement("div");
+        page.className = "page";
+        page.dataset.pageKey = key;
+
+        if(key === "full"){
+          page.innerHTML = `<div class="pageTitle">FULL</div>`;
+          const box = document.createElement("div");
+          box.className = "fullBox";
+          box.innerHTML = `
+            <div class="fullSub">
+              Paste + edit. Rhymes follow the last word on the line above your cursor. Use "/" for manual beat breaks.
+            </div>
+            <textarea class="fullEditor" spellcheck="false"></textarea>
+          `;
+          page.appendChild(box);
+          group.appendChild(page);
+          continue;
+        }
+
+        const title = (SECTION_DEFS.find(s=>s.key===key)?.title || key).toUpperCase();
+        page.innerHTML = `<div class="pageTitle">${escapeHtml(title)}</div>`;
+
+        const mount = document.createElement("div");
+        mount.style.display = "flex";
+        mount.style.flexDirection = "column";
+        mount.style.gap = "10px";
+
+        renderSectionBarsInto(p, key, mount);
+        page.appendChild(mount);
+        group.appendChild(page);
+      }
+
+      pager.appendChild(group);
+    }
+
+    els.bars.appendChild(pager);
+
+    // fill FULL editor content + wiring (do once)
+    const fullTa = els.bars.querySelector(".fullEditor");
+    if(fullTa){
+      fullTa.value = buildFullTextFromProject(p);
+
+      let tmr = null;
+      const commit = () => applyFullTextToProject(p, fullTa.value || "");
+      const refresh = () => { updateRhymesFromFullCaret(fullTa); updateDockForKeyboard(); };
+
+      refresh();
+
+      fullTa.addEventListener("input", ()=>{
+        if(tmr) clearTimeout(tmr);
+        tmr = setTimeout(commit, 220);
+        refresh();
+      });
+      fullTa.addEventListener("click", refresh);
+      fullTa.addEventListener("keyup", refresh);
+      fullTa.addEventListener("focus", refresh);
+    }
+
+    // infinite loop setup
+    teardownInfinitePages(pager);
+    setupInfinitePages(pager);
+
+    // after width is known, snap to active section (middle copy)
+    requestAnimationFrame(()=>{
+      // compute width again safely by calling setup once more
+      const fg = pager.querySelector('[data-pages-group="1"]');
+      if(fg){
+        const w = fg.scrollWidth || fg.getBoundingClientRect().width || 0;
+        pagesCopyWidth = Math.max(0, w);
+      }
+      scrollPagerToSection(pager, p.activeSection || "verse1");
+    });
+
+    // when user swipes, update activeSection based on nearest page (optional but helps state)
+    pager.addEventListener("scroll", ()=>{
+      if(!pagesCopyWidth) return;
+      const pageW = pagesCopyWidth / PAGE_ORDER.length;
+      if(!pageW) return;
+      const x = pager.scrollLeft - pagesCopyWidth; // relative to middle copy
+      const idx = Math.round(x / pageW);
+      const key = PAGE_ORDER[(idx % PAGE_ORDER.length + PAGE_ORDER.length) % PAGE_ORDER.length];
+      if(key && key !== p.activeSection){
+        p.activeSection = key;
+        touchProject(p);
+      }
+    }, { passive:true });
+
+    return;
+  }
+
+  // ✅ NORMAL MODE: existing behavior (one section at a time)
+  if(p.activeSection === "full"){
+    const fullText = buildFullTextFromProject(p);
+    els.bars.innerHTML = `
+      <div class="fullBox">
+        <div class="fullSub">
+          Paste + edit. Rhymes follow the last word on the line above your cursor. Use "/" for manual beat breaks.
+        </div>
+        <textarea id="fullEditor" class="fullEditor" spellcheck="false">${escapeHtml(fullText)}</textarea>
+      </div>
+    `;
+
+    const ta = document.getElementById("fullEditor");
+    let tmr = null;
+
+    const commit = () => applyFullTextToProject(p, ta.value || "");
+    const refresh = () => { updateRhymesFromFullCaret(ta); updateDockForKeyboard(); };
+
+    refresh();
+
+    ta.addEventListener("input", ()=>{
+      if(tmr) clearTimeout(tmr);
+      tmr = setTimeout(commit, 220);
+      refresh();
+    });
+    ta.addEventListener("click", refresh);
+    ta.addEventListener("keyup", refresh);
+    ta.addEventListener("focus", refresh);
+    return;
+  }
+
+  const sec = p.sections[p.activeSection];
+  els.bars.innerHTML = "";
+  const mount = document.createElement("div");
+  mount.id = "barsMount";
+  mount.style.display = "flex";
+  mount.style.flexDirection = "column";
+  mount.style.gap = "10px";
+  els.bars.appendChild(mount);
+
+  renderSectionBarsInto(p, p.activeSection, mount);
 }
 
 function renderAll(){
@@ -1424,7 +1542,9 @@ function renderAll(){
   else startEyePulseFromBpm();
 }
 
-// ---------- EXPORT ----------
+/***********************
+✅ EXPORT (unchanged)
+***********************/
 function safeFileName(name){
   const base = (name || "Beat Sheet Pro Export").trim() || "Beat Sheet Pro Export";
   return base.replace(/[^\w\s.-]+/g,"").replace(/\s+/g," ").trim();
@@ -1599,8 +1719,7 @@ els.recordBtn?.addEventListener("click", async ()=>{
 
 // ---------- boot ----------
 setDockHidden(loadDockHidden());
-setHeaderCollapsed(loadHeaderCollapsed());
-
+document.body.classList.toggle("headerCollapsed", loadHeaderCollapsed());
 renderAll();
 updateRhymes("");
 })();
