@@ -1,3 +1,4 @@
+<!-- index.html (FULL REPLACE - merged projects + html export) -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -5,7 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Beat Sheet Pro</title>
 
-  <!-- manifest href will be replaced at runtime with an absolute /<repo>/manifest.webmanifest -->
   <link id="appManifest" rel="manifest" href="./manifest.webmanifest?v=BOOT">
 
   <style>
@@ -41,12 +41,12 @@
       background:var(--bg);
       border-bottom:1px solid rgba(0,0,0,.06);
       padding:8px 10px;
-      max-height:25vh;
+      max-height:28vh;
       overflow:auto;
       -webkit-overflow-scrolling: touch;
     }
 
-    body.fullMode header{ max-height:14vh; }
+    body.fullMode header{ max-height:16vh; }
     body.fullMode .miniCard{ display:none; }
 
     body.headerCollapsed header{
@@ -115,11 +115,21 @@
       text-transform:uppercase;
       letter-spacing:.6px;
       line-height:1;
+      white-space:nowrap;
     }
+
     input[type="number"]{
       width:88px;
       font-weight:1000;
       padding-right:11px;
+    }
+
+    .wideInput{
+      width:100%;
+      padding:10px 12px;
+      font-size:15px;
+      font-weight:1000;
+      border-radius:14px;
     }
 
     .headshotSlot{
@@ -200,6 +210,7 @@
       grid-template-columns: 1fr 1fr;
       gap:10px;
       align-items:stretch;
+      margin-top:8px;
     }
     .metroBtn{
       display:flex; align-items:center; justify-content:center;
@@ -240,23 +251,7 @@
       max-width:65%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
     }
 
-    .wideInput{
-      width:100%;
-      padding:10px 12px;
-      font-size:15px;
-      font-weight:1000;
-      border-radius:14px;
-    }
-
     main{ padding:10px 10px 26px; }
-    .panel{
-      background:var(--card);
-      border:1px solid var(--stroke);
-      border-radius:18px;
-      padding:10px;
-      box-shadow:var(--shadow);
-      margin-bottom:10px;
-    }
     #bars{ display:flex; flex-direction:column; gap:10px; }
 
     .toast{
@@ -290,7 +285,6 @@
       transform: translateZ(0);
     }
 
-    /* hidden dock -> circle bottom-right */
     .rhymeDock.dockHidden{
       left:auto !important;
       right:10px !important;
@@ -377,7 +371,6 @@
       box-shadow:0 4px 10px rgba(0,0,0,.04);
     }
 
-    /* bar styles (needed so it looks like main) */
     .bar{
       background:var(--card);
       border:1px solid var(--stroke);
@@ -501,7 +494,6 @@
     }
     body.fullMode .fullEditor{ height:76vh; min-height:520px; }
 
-    /* recording list styles */
     .audioItem{
       display:flex;
       gap:10px;
@@ -556,6 +548,28 @@
       white-space:nowrap;
     }
 
+    /* merged projects controls */
+    .projRow{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
+      width:100%;
+    }
+    .projSelect{
+      min-width:180px;
+      max-width:100%;
+      font-weight:1000;
+    }
+    .projName{
+      flex: 1 1 220px;
+      min-width: 180px;
+    }
+    .miniBtn{
+      padding:9px 11px;
+      border-radius:14px;
+    }
+
     @media (max-width: 420px){
       .recordBtn, .metroBtn{ min-height:52px; }
     }
@@ -607,15 +621,20 @@
         </select>
       </div>
 
-      <div class="pill">
-        <label>Projects</label>
-        <select id="projectSort" style="border:0;outline:none;background:transparent;font-weight:1000;">
-          <option value="recent">Most recent</option>
-          <option value="az">A → Z</option>
-        </select>
-      </div>
-
       <button id="headerToggle2" class="headerToggleBtn" type="button">Hide</button>
+    </div>
+
+    <!-- ✅ merged projects row -->
+    <div class="projRow" style="margin-bottom:8px;">
+      <select id="projectPicker" class="projSelect">
+        <option>Loading…</option>
+      </select>
+
+      <input id="projectName" class="wideInput projName" type="text" placeholder="Project name…" />
+
+      <button id="newProjectBtn" class="miniBtn" type="button">New</button>
+      <button id="copyProjectBtn" class="miniBtn" type="button">Copy</button>
+      <button id="deleteProjectBtn" class="miniBtn" type="button">Del</button>
     </div>
 
     <div class="tabs" id="sectionTabs"></div>
@@ -637,18 +656,6 @@
   </header>
 
   <main>
-    <div class="panel">
-      <input id="projectName" class="wideInput" type="text" placeholder="Project name…" />
-    </div>
-
-    <div class="panel">
-      <div style="font-weight:1000;margin-bottom:8px;">Projects</div>
-      <div id="projectList"></div>
-      <div style="margin-top:10px;">
-        <button id="newProjectBtn">New project</button>
-      </div>
-    </div>
-
     <div id="bars"></div>
   </main>
 
@@ -665,12 +672,11 @@
 
   <div class="toast" id="toast">Saved</div>
 
-  <!-- ✅ Single robust loader (ONLY load once) -->
   <script>
   (function(){
     const repo = (location.pathname.split("/").filter(Boolean)[0] || "");
     const base = repo ? ("/" + repo) : "";
-    const v = "SHARED_20260210_6"; // << bump when you need to force refresh
+    const v = "SHARED_20260214_EXPORTHTML"; // ✅ bump to force refresh
 
     const man = document.getElementById("appManifest");
     if(man) man.href = base + "/manifest.webmanifest?v=" + encodeURIComponent(v);
@@ -682,7 +688,6 @@
   })();
   </script>
 
-  <!-- Optional: show errors on screen (keep for debugging; delete later if you want) -->
   <script>
   (function(){
     function show(msg){
