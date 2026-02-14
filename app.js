@@ -1502,15 +1502,12 @@ function renderBars(){
     setupInfinitePages(pager);
 
     // after width is known, snap to active section (middle copy)
-    requestAnimationFrame(()=>{
-      // compute width again safely by calling setup once more
-      const fg = pager.querySelector('[data-pages-group="1"]');
-      if(fg){
-        const w = fg.scrollWidth || fg.getBoundingClientRect().width || 0;
-        pagesCopyWidth = Math.max(0, w);
-      }
-      scrollPagerToSection(pager, p.activeSection || "verse1");
-    });
+   requestAnimationFrame(()=>{
+  // ✅ DO NOT override pagesCopyWidth with scrollWidth
+  // setupInfinitePages already measured correctly using viewport width
+  scrollPagerToSection(pager, p.activeSection || "verse1");
+});
+
 
     // when user swipes, update activeSection based on nearest page (optional but helps state)
   pager.addEventListener("scroll", ()=>{
