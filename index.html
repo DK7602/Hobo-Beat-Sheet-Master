@@ -1,4 +1,4 @@
-<!-- index.html (FULL REPLACE - merged projects + html export) -->
+<!-- index.html (FULL REPLACE - merged projects + html export + header fixes) -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -49,6 +49,7 @@
     body.fullMode header{ max-height:16vh; }
     body.fullMode .miniCard{ display:none; }
 
+    /* ✅ COLLAPSED HEADER: only Show + Metronome + Record */
     body.headerCollapsed header{
       max-height:none;
       overflow:hidden;
@@ -56,8 +57,10 @@
     }
     body.headerCollapsed .titleRow,
     body.headerCollapsed .topRow,
+    body.headerCollapsed .utilityRow,
     body.headerCollapsed .tabs,
-    body.headerCollapsed .miniCard{
+    body.headerCollapsed .miniCard,
+    body.headerCollapsed .projRow{
       display:none !important;
     }
     body.headerCollapsed .stickyTools{ margin-top:0; }
@@ -84,12 +87,28 @@
       white-space:nowrap;
     }
 
+    /* ✅ top row is ONLY: Export, Save, BPM, Hide */
     .topRow{
       display:flex;
       gap:8px;
-      flex-wrap:wrap;
+      flex-wrap:nowrap;
       align-items:center;
       margin-bottom:8px;
+      overflow:auto;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom:2px;
+    }
+
+    /* second row: headshot + auto split */
+    .utilityRow{
+      display:flex;
+      gap:8px;
+      flex-wrap:nowrap;
+      align-items:center;
+      margin-bottom:8px;
+      overflow:auto;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom:2px;
     }
 
     button, .pill, input, select{
@@ -100,13 +119,14 @@
       font-size:14px;
       box-shadow:0 6px 14px rgba(0,0,0,.05);
     }
-    button{ font-weight:1000; cursor:pointer; user-select:none; }
+    button{ font-weight:1000; cursor:pointer; user-select:none; white-space:nowrap; }
 
     .pill{
       display:flex;
       align-items:center;
       gap:8px;
       padding:9px 11px;
+      flex:0 0 auto;
     }
     .pill label{
       font-size:10px;
@@ -118,10 +138,13 @@
       white-space:nowrap;
     }
 
+    /* ✅ smaller BPM box */
+    .bpmPill{ padding:8px 10px; }
     input[type="number"]{
-      width:88px;
+      width:64px;
       font-weight:1000;
-      padding-right:11px;
+      padding:8px 9px;
+      border-radius:12px;
     }
 
     .wideInput{
@@ -136,8 +159,7 @@
       display:flex;
       align-items:center;
       justify-content:center;
-      flex:1 1 auto;
-      min-width:72px;
+      flex:0 0 auto;
     }
     .headshotWrap{
       position:relative;
@@ -548,22 +570,28 @@
       white-space:nowrap;
     }
 
-    /* merged projects controls */
+    /* ✅ projects row: single line, shorter name input, buttons inline */
     .projRow{
-      display:flex;
+      display:grid;
+      grid-template-columns: minmax(150px, 1fr) 190px auto auto auto;
       gap:8px;
-      flex-wrap:wrap;
       align-items:center;
       width:100%;
+      margin-bottom:8px;
+      overflow:auto;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom:2px;
     }
     .projSelect{
-      min-width:180px;
-      max-width:100%;
+      min-width:150px;
       font-weight:1000;
     }
     .projName{
-      flex: 1 1 220px;
-      min-width: 180px;
+      width:190px;
+      min-width:190px;
+      padding:9px 11px;
+      font-size:14px;
+      font-weight:1000;
     }
     .miniBtn{
       padding:9px 11px;
@@ -572,6 +600,8 @@
 
     @media (max-width: 420px){
       .recordBtn, .metroBtn{ min-height:52px; }
+      .projRow{ grid-template-columns: minmax(140px, 1fr) 170px auto auto auto; }
+      .projName{ width:170px; min-width:170px; }
     }
   </style>
 </head>
@@ -587,29 +617,27 @@
       <div class="small" id="statusText"></div>
     </div>
 
+    <!-- ✅ Fix #4: ONLY Export, Save, BPM, Hide -->
     <div class="topRow">
-      <button id="exportBtn">Export</button>
-      <button id="saveBtn">Save</button>
+      <button id="exportBtn" type="button">Export</button>
+      <button id="saveBtn" type="button">Save</button>
 
-      <div class="pill">
+      <div class="pill bpmPill">
         <label>BPM</label>
         <input id="bpm" type="number" min="40" max="240" value="95" />
       </div>
 
+      <button id="headerToggle2" class="headerToggleBtn" type="button">Hide</button>
+    </div>
+
+    <!-- ✅ keep head + autosplit, but not in the top row -->
+    <div class="utilityRow">
       <div class="headshotSlot" aria-hidden="true">
         <div class="headshotWrap">
           <img class="bpmHeadshot" src="./headshot.png" alt="">
           <span id="eyeL" class="eyeDot left"></span>
           <span id="eyeR" class="eyeDot right"></span>
         </div>
-      </div>
-
-      <div class="pill">
-        <label>Highlight</label>
-        <select id="highlightMode" style="border:0;outline:none;background:transparent;font-weight:1000;">
-          <option value="focused">Focused</option>
-          <option value="all">All</option>
-        </select>
       </div>
 
       <div class="pill">
@@ -620,17 +648,15 @@
           <option value="none">Off</option>
         </select>
       </div>
-
-      <button id="headerToggle2" class="headerToggleBtn" type="button">Hide</button>
     </div>
 
-    <!-- ✅ merged projects row -->
-    <div class="projRow" style="margin-bottom:8px;">
+    <!-- ✅ Fix #2: shorter project name + buttons inline -->
+    <div class="projRow">
       <select id="projectPicker" class="projSelect">
         <option>Loading…</option>
       </select>
 
-      <input id="projectName" class="wideInput projName" type="text" placeholder="Project name…" />
+      <input id="projectName" class="projName" type="text" placeholder="Project name…" />
 
       <button id="newProjectBtn" class="miniBtn" type="button">New</button>
       <button id="copyProjectBtn" class="miniBtn" type="button">Copy</button>
@@ -639,6 +665,7 @@
 
     <div class="tabs" id="sectionTabs"></div>
 
+    <!-- ✅ Fix #1: in collapsed mode, only these + Show remain visible -->
     <div class="stickyTools">
       <button id="metroBtn" class="metroBtn">Metronome</button>
       <button id="recordBtn" class="recordBtn">Record</button>
@@ -676,7 +703,7 @@
   (function(){
     const repo = (location.pathname.split("/").filter(Boolean)[0] || "");
     const base = repo ? ("/" + repo) : "";
-    const v = "SHARED_20260214_EXPORTHTML"; // ✅ bump to force refresh
+    const v = "SHARED_20260214_EXPORTHTML_FIXES"; // ✅ bump to force refresh
 
     const man = document.getElementById("appManifest");
     if(man) man.href = base + "/manifest.webmanifest?v=" + encodeURIComponent(v);
