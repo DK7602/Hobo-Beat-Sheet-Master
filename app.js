@@ -1,4 +1,4 @@
-/* Beat Sheet Pro - app.js (FULL REPLACE v_EXPORT_HTML_2FILES_FIXES) */
+/* Beat Sheet Pro - app.js (FULL REPLACE v_DRUMS4_FIXEDROW_NO_AUTOSPLIT_UI) */
 (() => {
 "use strict";
 
@@ -21,11 +21,16 @@ const els = {
   exportBtn: need("exportBtn"),
   saveBtn: need("saveBtn"),
   bpm: need("bpm"),
-  metroBtn: need("metroBtn"),
-  autoSplitMode: need("autoSplitMode"),
 
-  // merged header projects UI
+  // ✅ drums (metronome patterns)
+  drum1Btn: need("drum1Btn"),
+  drum2Btn: need("drum2Btn"),
+  drum3Btn: need("drum3Btn"),
+  drum4Btn: need("drum4Btn"),
+
+  // projects
   projectPicker: need("projectPicker"),
+  editProjectBtn: need("editProjectBtn"),
   newProjectBtn: need("newProjectBtn"),
   copyProjectBtn: need("copyProjectBtn"),
   deleteProjectBtn: need("deleteProjectBtn"),
@@ -38,8 +43,6 @@ const els = {
 
   sectionTabs: need("sectionTabs"),
   bars: need("bars"),
-
-  projectName: need("projectName"), // now in header
 
   recordBtn: need("recordBtn"),
   recordName: need("recordName"),
@@ -161,7 +164,6 @@ function startEyePulseFromBpm(){
   const intervalMs = 60000 / bpm;
   eyePulseTimer = setInterval(()=>flashEyes(), intervalMs);
 }
-// Some older builds referenced this. Keep it defined so Shared never crashes.
 window.updateBlinkTargets = window.updateBlinkTargets || function(){};
 
 // ---------- header collapse ----------
@@ -265,24 +267,10 @@ function syllGlowClass(n){
   return "red";
 }
 
-// ---------- beat splitting ----------
+// ---------- beat splitting (AUTO ALWAYS ON; manual via /) ----------
 function splitBySlashes(text){
   const parts = (text||"").split("/").map(s=>s.trim());
   return [parts[0]||"", parts[1]||"", parts[2]||"", parts[3]||""];
-}
-function autoSplitWords(text){
-  const clean = (text||"").replace(/[\/]/g," ").trim();
-  if(!clean) return ["","","",""];
-  const words = clean.split(/\s+/);
-  const per = Math.ceil(words.length/4) || 1;
-  const per2 = per * 2;
-  const per3 = per * 3;
-  return [
-    words.slice(0,per).join(" "),
-    words.slice(per,per2).join(" "),
-    words.slice(per2,per3).join(" "),
-    words.slice(per3).join(" "),
-  ];
 }
 function splitWordIntoChunks(word){
   const raw = String(word);
@@ -320,6 +308,7 @@ function autoSplitSyllablesClean(text){
   const sylls = words.map(w=>countSyllablesWord(w));
   const total = sylls.reduce((a,b)=>a+b,0);
   if(!total) return ["","","",""];
+
   const targets = buildTargets(total);
   const beats = [[],[],[],[]];
   const beatSyll = [0,0,0,0];
@@ -384,12 +373,9 @@ function autoSplitSyllablesClean(text){
 
   return beats.map(arr=>arr.join(" ").trim());
 }
-function computeBeats(text, mode){
-  const hasSlash = (text||"").includes("/");
-  if(hasSlash) return splitBySlashes(text);
-  if(mode === "none") return ["","","",""];
-  if(mode === "words") return autoSplitWords(text);
-  return autoSplitSyllablesClean(text);
+function computeBeats(text){
+  if((text||"").includes("/")) return splitBySlashes(text);
+  return autoSplitSyllablesClean(text); // ✅ always on
 }
 
 // ---------- rhymes ----------
@@ -522,8 +508,7 @@ function newProject(name=""){
     updatedAt: nowISO(),
     activeSection: "verse1",
     bpm: 95,
-    highlightMode: "all",          // ✅ Fix #3: always ALL
-    autoSplitMode: "syllables",
+    highlightMode: "all",
     recordings: [],
     sections: blankSections(),
   };
@@ -554,11 +539,7 @@ function repairProject(p){
   if(!p.activeSection) p.activeSection = "verse1";
   if(!Array.isArray(p.recordings)) p.recordings = [];
   if(!p.bpm) p.bpm = 95;
-
-  // ✅ Fix #3: force all (kills focused UI + outline behavior)
   p.highlightMode = "all";
-
-  if(!p.autoSplitMode) p.autoSplitMode = "syllables";
   return p;
 }
 
@@ -576,7 +557,7 @@ function saveStore(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(store)); 
 function getActiveProject(){ return store.projects.find(p=>p.id===store.activeProjectId) || store.projects[0]; }
 function touchProject(p){ p.updatedAt = nowISO(); saveStore(); }
 
-// ✅ header project picker
+// project picker
 function renderProjectPicker(){
   if(!els.projectPicker) return;
 
@@ -594,13 +575,15 @@ function renderProjectPicker(){
   }).join("");
 }
 
-// ---------- metronome + recording ----------
+// ---------- metronome + recording (4 drum patterns) ----------
 let audioCtx = null;
 let metroGain = null;
 let recordDest = null;
 
 let metroTimer = null;
 let metroBeat16 = 0;
+
+let activeDrum = 1; // 1..4
 
 function ensureAudio(){
   if(!audioCtx){
@@ -612,6 +595,7 @@ function ensureAudio(){
     metroGain.connect(recordDest);
   }
 }
+
 function playKick(){
   ensureAudio();
   const t = audioCtx.currentTime;
@@ -652,9 +636,36 @@ function playSnare(){
   noise.start(t);
   noise.stop(t + 0.12);
 }
-function playHat(){
+function playRim(){
   ensureAudio();
   const t = audioCtx.currentTime;
+  const bufferSize = Math.floor(audioCtx.sampleRate * 0.035);
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for(let i=0;i<bufferSize;i++) data[i] = (Math.random()*2-1) * (1 - i/bufferSize);
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = buffer;
+
+  const bp = audioCtx.createBiquadFilter();
+  bp.type = "bandpass";
+  bp.frequency.value = 2200;
+  bp.Q.value = 6;
+
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.22, t + 0.002);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.03);
+
+  noise.connect(bp);
+  bp.connect(g);
+  g.connect(metroGain);
+
+  noise.start(t);
+  noise.stop(t + 0.04);
+}
+function playHat(atTime = null){
+  ensureAudio();
+  const t = atTime ?? audioCtx.currentTime;
   const bufferSize = Math.floor(audioCtx.sampleRate * 0.03);
   const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
   const data = buffer.getChannelData(0);
@@ -679,7 +690,7 @@ function playHat(){
   noise.stop(t + 0.04);
 }
 
-/* ✅ Fix #3: highlight ALWAYS ALL — no focused bar concept */
+/* highlight ALWAYS ALL */
 function flashBeats(beatInBar){
   const barEls = document.querySelectorAll(".bar");
   barEls.forEach(barEl=>{
@@ -691,29 +702,68 @@ function flashBeats(beatInBar){
   });
 }
 
+function drumButtons(){
+  return [
+    els.drum1Btn, els.drum2Btn, els.drum3Btn, els.drum4Btn
+  ].filter(Boolean);
+}
+function updateDrumButtonsUI(){
+  const btns = drumButtons();
+  btns.forEach((b, i)=>{
+    b.classList.remove("on","active");
+    if(metroOn) b.classList.add("on");
+    if(metroOn && activeDrum === (i+1)) b.classList.add("active");
+  });
+}
+
 function startMetronome(){
   ensureAudio();
   if(audioCtx.state === "suspended") audioCtx.resume();
   stopMetronome();
 
   metroOn = true;
-  if(els.metroBtn){
-    els.metroBtn.textContent = "Stop";
-    els.metroBtn.classList.add("on");
-  }
   metroBeat16 = 0;
   startEyePulseFromBpm();
+  updateDrumButtonsUI();
 
   const tick = () => {
     const p = getActiveProject();
     const bpm = clampInt(parseInt(els.bpm?.value || p.bpm,10), 40, 240);
     const intervalMs = 60000 / bpm / 4;
+
     const step16 = metroBeat16 % 16;
     const beatInBar = Math.floor(step16 / 4);
 
-    playHat();
-    if(step16 === 0 || step16 === 8) playKick();
-    if(step16 === 4 || step16 === 12) playSnare();
+    // ✅ 4 common rap patterns (closed hats, kick, snare, rim)
+    if(activeDrum === 1){
+      // Basic: hats 16ths, kick 1&3, snare 2&4
+      playHat();
+      if(step16 === 0 || step16 === 8) playKick();
+      if(step16 === 4 || step16 === 12) playSnare();
+    }else if(activeDrum === 2){
+      // Boom-bap: hats 8ths, kick syncopation, rim accents
+      if(step16 % 2 === 0) playHat();
+      if(step16 === 0 || step16 === 6 || step16 === 10 || step16 === 14) playKick();
+      if(step16 === 4 || step16 === 12) playSnare();
+      if(step16 === 2 || step16 === 10) playRim();
+    }else if(activeDrum === 3){
+      // Trap: hats 16ths + quick doubles, kick sync, rim late
+      const t = audioCtx.currentTime;
+      playHat(t);
+      if(step16 === 3 || step16 === 7 || step16 === 11 || step16 === 15){
+        playHat(t + (intervalMs/1000)*0.5);
+      }
+      if(step16 === 0 || step16 === 7 || step16 === 10 || step16 === 13) playKick();
+      if(step16 === 4 || step16 === 12) playSnare();
+      if(step16 === 14) playRim();
+    }else{
+      // West coast bounce: hats 16ths, kick pocket, rim on upbeat
+      playHat();
+      if(step16 === 0 || step16 === 8 || step16 === 11 || step16 === 15) playKick();
+      if(step16 === 4 || step16 === 12) playSnare();
+      if(step16 === 2 || step16 === 14) playRim();
+    }
+
     if(step16 % 4 === 0) flashBeats(beatInBar);
 
     metroBeat16++;
@@ -725,14 +775,33 @@ function stopMetronome(){
   if(metroTimer) clearTimeout(metroTimer);
   metroTimer = null;
   metroOn = false;
-  if(els.metroBtn){
-    els.metroBtn.textContent = "Metronome";
-    els.metroBtn.classList.remove("on");
-  }
+  updateDrumButtonsUI();
   if(!recording) stopEyePulse();
 }
 
-// smooth playback
+function handleDrumPress(which){
+  // if off -> start on that drum
+  if(!metroOn){
+    activeDrum = which;
+    startMetronome();
+    showToast(`Drum ${which}`);
+    return;
+  }
+
+  // if on and same -> stop
+  if(metroOn && activeDrum === which){
+    stopMetronome();
+    showToast("Stop");
+    return;
+  }
+
+  // if on and different -> switch pattern (keep running)
+  activeDrum = which;
+  updateDrumButtonsUI();
+  showToast(`Drum ${which}`);
+}
+
+// ---------- smooth playback + recording ----------
 let currentPlayback = null;
 let currentPlaybackId = null;
 const decodedCache = new Map();
@@ -1143,9 +1212,7 @@ function renderBars(){
     els.bars.innerHTML = `
       <div class="fullBox">
         <div class="fullSub">
-          Paste + edit here. Rhymes follow the last word on the line ABOVE your cursor.<br>
-          ✅ Blank lines are just spacing (they do NOT create empty bars).<br>
-          Headings: ${FULL_HEADINGS.join(", ")}
+          Paste + edit. Rhymes follow the last word on the line above your cursor. Use "/" for manual beat breaks.
         </div>
         <textarea id="fullEditor" class="fullEditor" spellcheck="false">${escapeHtml(fullText)}</textarea>
       </div>
@@ -1167,7 +1234,6 @@ function renderBars(){
     ta.addEventListener("click", refresh);
     ta.addEventListener("keyup", refresh);
     ta.addEventListener("focus", refresh);
-
     return;
   }
 
@@ -1180,7 +1246,7 @@ function renderBars(){
 
     const n = countSyllablesLine(bar.text||"");
     const glow = syllGlowClass(n);
-    const beats = computeBeats(bar.text||"", p.autoSplitMode || "syllables");
+    const beats = computeBeats(bar.text||"");
 
     wrap.innerHTML = `
       <div class="barTop">
@@ -1212,8 +1278,7 @@ function renderBars(){
       const text = ta.value || "";
       const caret = ta.selectionStart || 0;
       const beatIdx = caretBeatIndex(text, caret);
-      const modeNow = p.autoSplitMode || "syllables";
-      const b = computeBeats(text, modeNow);
+      const b = computeBeats(text);
 
       let prevText = "";
       if(beatIdx > 0){
@@ -1221,7 +1286,7 @@ function renderBars(){
       }else{
         const prevBar = sec.bars[idx-1];
         if(prevBar && prevBar.text){
-          const pb = computeBeats(prevBar.text, modeNow);
+          const pb = computeBeats(prevBar.text);
           prevText = pb[3] || pb[2] || pb[1] || pb[0] || "";
         }
       }
@@ -1246,8 +1311,7 @@ function renderBars(){
       const g = syllGlowClass(newN);
       if(g) syllPill.classList.add(g);
 
-      const modeNow = p.autoSplitMode || "syllables";
-      const b = computeBeats(text, modeNow);
+      const b = computeBeats(text);
       for(let i=0;i<4;i++){
         beatEls[i].innerHTML = escapeHtml(b[i]||"");
       }
@@ -1271,16 +1335,7 @@ function renderAll(){
   const p = getActiveProject();
   document.body.classList.toggle("fullMode", p.activeSection === "full");
 
-  // header fields
-  if(els.projectName) els.projectName.value = p.name || "";
   if(els.bpm) els.bpm.value = p.bpm || 95;
-  if(els.autoSplitMode) els.autoSplitMode.value = p.autoSplitMode || "syllables";
-
-  // ✅ Fix #3: force persisted highlight to ALL (even for old projects)
-  if(p.highlightMode !== "all"){
-    p.highlightMode = "all";
-    touchProject(p);
-  }
 
   renderProjectPicker();
   renderTabs();
@@ -1290,17 +1345,17 @@ function renderAll(){
   if(els.statusText) els.statusText.textContent = " ";
   updateDockForKeyboard();
   updateRecordButtonUI();
+  updateDrumButtonsUI();
 
   if(!(metroOn || recording)) stopEyePulse();
   else startEyePulseFromBpm();
 }
 
-// ---------- EXPORT (NEW): downloads 2 HTML files ----------
+// ---------- EXPORT (downloads 2 HTML files) ----------
 function safeFileName(name){
   const base = (name || "Beat Sheet Pro Export").trim() || "Beat Sheet Pro Export";
   return base.replace(/[^\w\s.-]+/g,"").replace(/\s+/g," ").trim();
 }
-
 function makeHtmlDoc(title, bodyText){
   const esc = escapeHtml(bodyText);
   return `<!doctype html>
@@ -1333,7 +1388,6 @@ function makeHtmlDoc(title, bodyText){
 </body>
 </html>`;
 }
-
 function downloadTextAsFile(filename, text, mime="text/html"){
   const blob = new Blob([text], { type: mime });
   const url = URL.createObjectURL(blob);
@@ -1345,10 +1399,7 @@ function downloadTextAsFile(filename, text, mime="text/html"){
   a.remove();
   setTimeout(()=>URL.revokeObjectURL(url), 6000);
 }
-
 function buildSplitExportText(p){
-  // Same section headings, but each bar line becomes: b1 | b2 | b3 | b4
-  const modeNow = p.autoSplitMode || "syllables";
   const out = [];
   for(const s of SECTION_DEFS){
     out.push(`[${s.title}]`);
@@ -1356,8 +1407,8 @@ function buildSplitExportText(p){
     for(const bar of (sec?.bars || [])){
       const raw = (bar.text || "").trim();
       if(!raw) continue;
-      const beats = computeBeats(raw, modeNow).map(x => (x||"").trim());
-      const line = beats.filter(Boolean).join(" | "); // vertical separators
+      const beats = computeBeats(raw).map(x => (x||"").trim());
+      const line = beats.filter(Boolean).join(" | ");
       out.push(line);
     }
     out.push("");
@@ -1369,12 +1420,10 @@ els.exportBtn?.addEventListener("click", ()=>{
   const p = getActiveProject();
   const name = safeFileName(p.name || "Beat Sheet Pro");
 
-  // File A: Full export (same as Full view)
   const fullText = buildFullTextFromProject(p).trim() || "";
   const htmlA = makeHtmlDoc(`${name} — FULL`, fullText);
   downloadTextAsFile(`${name} - FULL.html`, htmlA);
 
-  // File B: Split export (card split with |)
   const splitText = buildSplitExportText(p).trim() || "";
   const htmlB = makeHtmlDoc(`${name} — SPLIT`, splitText);
   downloadTextAsFile(`${name} - SPLIT.html`, htmlB);
@@ -1430,11 +1479,16 @@ els.projectPicker?.addEventListener("change", ()=>{
   }
 });
 
-els.projectName?.addEventListener("input", (e)=>{
+// ✅ project rename via Edit button (prompt)
+els.editProjectBtn?.addEventListener("click", ()=>{
   const p = getActiveProject();
-  p.name = e.target.value || "";
+  const cur = (p.name || "").trim();
+  const next = prompt("Project name:", cur);
+  if(next === null) return;
+  p.name = String(next || "").trim();
   touchProject(p);
-  renderProjectPicker(); // keep dropdown label updated
+  renderProjectPicker();
+  showToast("Renamed");
 });
 
 els.saveBtn?.addEventListener("click", ()=>{
@@ -1448,22 +1502,17 @@ els.bpm?.addEventListener("change", ()=>{
   p.bpm = clampInt(parseInt(els.bpm.value,10), 40, 240);
   els.bpm.value = p.bpm;
   touchProject(p);
-  if(metroOn) startMetronome();
+  if(metroOn){
+    startMetronome(); // restart timing
+  }
   if(metroOn || recording) startEyePulseFromBpm();
 });
 
-els.autoSplitMode?.addEventListener("change", ()=>{
-  const p = getActiveProject();
-  p.autoSplitMode = els.autoSplitMode.value;
-  touchProject(p);
-  renderBars();
-  showToast("Split mode");
-});
-
-els.metroBtn?.addEventListener("click", ()=>{
-  if(metroOn) stopMetronome();
-  else startMetronome();
-});
+// drum buttons
+els.drum1Btn?.addEventListener("click", ()=>handleDrumPress(1));
+els.drum2Btn?.addEventListener("click", ()=>handleDrumPress(2));
+els.drum3Btn?.addEventListener("click", ()=>handleDrumPress(3));
+els.drum4Btn?.addEventListener("click", ()=>handleDrumPress(4));
 
 els.recordBtn?.addEventListener("click", async ()=>{
   try{
