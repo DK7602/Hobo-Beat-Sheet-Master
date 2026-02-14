@@ -94,9 +94,14 @@ const SECTION_DEFS = [
   { key:"verse2",  title:"Verse 2",  bars:16, extra:4 },
   { key:"chorus2", title:"Chorus 2", bars:12, extra:4 },
   { key:"verse3",  title:"Verse 3",  bars:16, extra:4 },
-  { key:"chorus3", title:"Chorus 3", bars:12, extra:4 },
+
+  // ✅ Bridge goes here
   { key:"bridge",  title:"Bridge",   bars: 8, extra:4 },
+
+  // ✅ Chorus 3 after Bridge
+  { key:"chorus3", title:"Chorus 3", bars:12, extra:4 },
 ];
+
 
 const FULL_ORDER = ["verse1","chorus1","verse2","chorus2","verse3","bridge","chorus3"];
 const FULL_HEADINGS = FULL_ORDER.map(k => (SECTION_DEFS.find(s=>s.key===k)?.title || k).toUpperCase());
