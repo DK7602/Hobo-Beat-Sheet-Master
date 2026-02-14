@@ -10,6 +10,11 @@
 
   <style>
     :root{
+      /* ✅ CRITICAL: makes 100vw include padding/border (fixes snap drift) */
+*, *::before, *::after{
+  box-sizing: border-box;
+}
+
       --bg:#e9e9e9;
       --card:#ffffff;
       --stroke:rgba(0,0,0,.12);
