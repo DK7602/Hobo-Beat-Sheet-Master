@@ -1,4 +1,4 @@
-<!-- index.html (FULL REPLACE v_HOBO_BEATSHEET_IDB_SIMPLE_PAGER_CENTER_SCROLL_v2_SPRAYFONT_HLLOCK_v2_NOHSCROLL_OUTLINE) -->
+<!-- index.html (FULL REPLACE v_HOBO_BEATSHEET_IDB_SIMPLE_PAGER_CENTER_SCROLL_v2_SPRAYFONT_HLLOCK_v2_NOHSCROLL_OUTLINE_VCENTER_v1) -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -101,7 +101,7 @@
       overflow:auto;
       -webkit-overflow-scrolling:touch;
 
-      /* ✅ FIX: prevent any accidental horizontal scroll in header area */
+      /* ✅ prevent any accidental horizontal scroll in header area */
       overflow-x:hidden;
     }
 
@@ -126,7 +126,7 @@
     /* ✅ PROTECT HEADSHOT: NEVER WRAP THIS ROW */
     .titleRow{
       display:flex;
-      align-items:flex-end;
+      align-items:center;          /* ✅ centers title area vs headshot row */
       justify-content:space-between;
       gap:6px;
       margin-bottom:6px;
@@ -134,19 +134,20 @@
       flex-wrap:nowrap;
       min-width:0;
 
-      /* ✅ FIX: make sure this row cannot create horizontal scroll */
+      /* ✅ make sure this row cannot create horizontal scroll */
       overflow:hidden;
     }
 
-    /* ✅ TITLE: keep your size, but stop it from expanding layout width */
+    /* ✅ TITLE: vertically centered in its 64px box, no line-height change */
     .title{
       flex:1 1 auto;
       min-width:0;
       margin:0;
 
-      height:64px;
+      height:64px;                 /* locks top-row height */
       display:flex;
-      align-items:flex-end;
+      align-items:center;          /* ✅ vertical center WITHOUT changing line-height */
+      justify-content:flex-start;
 
       font-family:"DeardorfDrip", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
       font-weight:400;
@@ -157,15 +158,10 @@
       overflow:hidden;
       text-overflow:clip;
 
-      /* keep same font size */
       font-size: clamp(22px, 7.2vw, 44px);
 
-      /* ✅ blue fill */
       color: var(--hlBlue);
 
-      /* ✅ FIX: outline + existing highlighter shadows
-         - First 8 shadows = thin black outline
-         - Then your green/blue spray glow */
       text-shadow:
         /* thin black outline */
         -1px 0   0 rgba(0,0,0,.85),
@@ -186,8 +182,8 @@
         2px 2px 0 rgba(0,229,255,.95),
         7px 6px 16px rgba(0,229,255,.22);
 
-      transform-origin:left bottom;
-      transform: translateY(2px) scaleX(1.85);
+      transform-origin:left center; /* ✅ keeps your “fill the air” look but centers vertically */
+      transform: scaleX(1.85);
       padding-right:10px;
     }
 
@@ -783,7 +779,7 @@
   (function(){
     const repo = (location.pathname.split("/").filter(Boolean)[0] || "");
     const base = repo ? ("/" + repo) : "";
-    const v = "SHARED_20260215_CENTER_SCROLL_WRAP_FIX_v2_SPRAYFONT_HLLOCK_v2_NOHSCROLL_OUTLINE";
+    const v = "SHARED_20260215_CENTER_SCROLL_WRAP_FIX_v2_SPRAYFONT_HLLOCK_v2_NOHSCROLL_OUTLINE_VCENTER_v1";
 
     const man = document.getElementById("appManifest");
     if(man) man.href = base + "/manifest.webmanifest?v=" + encodeURIComponent(v);
