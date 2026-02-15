@@ -1,6 +1,13 @@
 /* Beat Sheet Pro - app.js (FULL REPLACE v_IDB_AUDIO_SIMPLE_PAGER_WRAP_FIX_SCROLL_CENTER_v2) */
 (() => {
 "use strict";
+function syncHeaderHeightVar(){
+  const header = document.querySelector("header");
+  if(!header) return;
+  const h = Math.ceil(header.getBoundingClientRect().height || 0);
+  document.documentElement.style.setProperty("--headerH", h + "px");
+}
+window.addEventListener("resize", ()=>syncHeaderHeightVar());
 
 /***********************
 ✅ remembers last textarea user typed in (mobile fix)
@@ -311,6 +318,7 @@ function setHeaderCollapsed(isCol){
   updateDockForKeyboard();
   if(isCol) stopEyePulse();
   else startEyePulseFromBpm();
+syncHeaderHeightVar();
 
   renderAll();
 }
@@ -2028,6 +2036,7 @@ els.mp3Input?.addEventListener("change", async (e)=>{
 (async function boot(){
   setDockHidden(loadDockHidden());
   document.body.classList.toggle("headerCollapsed", loadHeaderCollapsed());
+syncHeaderHeightVar();
 
   await migrateAllAudioOnce();
 
