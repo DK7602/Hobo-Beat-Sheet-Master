@@ -1381,7 +1381,7 @@ function shouldIgnoreSwipeStart(target){
 }
 
 function setupOnePageSwipe(pagerEl, p){
-  // ✅ prioritize vertical scroll everywhere; only grab when clearly horizontal
+  // ✅ allow vertical page scroll by default
   pagerEl.style.touchAction = "pan-y pinch-zoom";
   pagerEl.style.overscrollBehavior = "contain";
   pagerEl.style.webkitOverflowScrolling = "touch";
@@ -1395,40 +1395,8 @@ function setupOnePageSwipe(pagerEl, p){
   let startScroll = 0;
   let startIdx = 0;
 
-  const H_START = 26;
-  const V_CANCEL = 10;
-
-  const onStart = (clientX, clientY)=>{
-    tracking = true;
-    horizontalLock = false;
-    startX = clientX;
-    startY = clientY;
-    startScroll = pagerEl.scrollLeft;
-    startIdx = getCurrentIdx(pagerEl);
-    pagerEl.classList.add("dragging");
-  };
-
-  const onMove = (clientX, clientY)=>{
-    if(!tracking) return;
-
-    const dx = clientX - startX;
-    const dy = clientY - startY;
-
-    if(!horizontalLock){
-      if(Math.abs(dy) > V_CANCEL && Math.abs(dy) > Math.abs(dx)){
-        tracking = false;
-        pagerEl.classList.remove("dragging");
-        return;
-      }
-      if(Math.abs(dx) > H_START && Math.abs(dx) > Math.abs(dy) * 1.2){
-        horizontalLock = true;
-      }else{
-        return;
-      }
-    }
-
-    pagerEl.scrollLeft = startScroll - dx;
-  };
+  const H_START = 26;   // horizontal distance before we lock
+  const V_CANCEL = 10;  // if vertical wins early, abandon
 
   const wrapIndex = (idx)=>{
     const last = PAGE_ORDER.length - 1;
@@ -1437,7 +1405,7 @@ function setupOnePageSwipe(pagerEl, p){
     return idx;
   };
 
-  const onEnd = ()=>{
+  const endDrag = ()=>{
     if(!tracking){
       pagerEl.classList.remove("dragging");
       return;
@@ -1462,22 +1430,58 @@ function setupOnePageSwipe(pagerEl, p){
     pagerEl.classList.remove("dragging");
   };
 
-  pagerEl.addEventListener("touchstart", (e)=>{
+  pagerEl.addEventListener("pointerdown", (e)=>{
+    if(e.pointerType === "mouse") return; // mouse can just scroll normally
     if(shouldIgnoreSwipeStart(e.target)) return;
-    const t = e.touches[0];
-    if(!t) return;
-    onStart(t.clientX, t.clientY);
-  }, { passive:true });
 
-  pagerEl.addEventListener("touchmove", (e)=>{
-    const t = e.touches[0];
-    if(!t) return;
-    onMove(t.clientX, t.clientY);
-  }, { passive:true });
+    tracking = true;
+    horizontalLock = false;
 
-  pagerEl.addEventListener("touchend", onEnd, { passive:true });
-  pagerEl.addEventListener("touchcancel", onEnd, { passive:true });
+    startX = e.clientX;
+    startY = e.clientY;
+    startScroll = pagerEl.scrollLeft;
+    startIdx = getCurrentIdx(pagerEl);
 
+    pagerEl.classList.add("dragging");
+  });
+
+  pagerEl.addEventListener("pointermove", (e)=>{
+    if(!tracking) return;
+
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+
+    // If user is scrolling vertically first, abandon immediately (do NOT capture)
+    if(!horizontalLock){
+      if(Math.abs(dy) > V_CANCEL && Math.abs(dy) > Math.abs(dx)){
+        tracking = false;
+        pagerEl.classList.remove("dragging");
+        return;
+      }
+      // Lock only when clearly horizontal
+      if(Math.abs(dx) > H_START && Math.abs(dx) > Math.abs(dy) * 1.2){
+        horizontalLock = true;
+        try{ pagerEl.setPointerCapture(e.pointerId); }catch{}
+      }else{
+        return; // don't interfere until locked
+      }
+    }
+
+    // Once locked, drag horizontally
+    pagerEl.scrollLeft = startScroll - dx;
+  });
+
+  pagerEl.addEventListener("pointerup", (e)=>{
+    try{ pagerEl.releasePointerCapture(e.pointerId); }catch{}
+    endDrag();
+  });
+
+  pagerEl.addEventListener("pointercancel", (e)=>{
+    try{ pagerEl.releasePointerCapture(e.pointerId); }catch{}
+    endDrag();
+  });
+
+  // Keep active section in sync after scroll settles (non-drag / momentum)
   let scrollTmr = null;
   pagerEl.addEventListener("scroll", ()=>{
     if(scrollTmr) clearTimeout(scrollTmr);
@@ -1487,6 +1491,7 @@ function setupOnePageSwipe(pagerEl, p){
     }, 120);
   }, { passive:true });
 }
+
 
 
 /***********************
