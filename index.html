@@ -1,4 +1,4 @@
-<!-- index.html (FULL REPLACE v_HOBO_BEATSHEET_IDB_SIMPLE_PAGER_CENTER_SCROLL_v2) -->
+<!-- index.html (FULL REPLACE v_HOBO_BEATSHEET_IDB_SIMPLE_PAGER_CENTER_SCROLL_v2_SPRAYFONT) -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -11,6 +11,17 @@
   <style>
     /* ✅ real global box sizing */
     *, *::before, *::after{ box-sizing:border-box; }
+
+    /* ✅ YOUR UPLOADED SPRAY PAINT FONT
+       IMPORTANT: put the .otf file in the SAME folder as this index.html on GitHub Pages.
+       If you rename the file (recommended), update the url(...) below to match exactly. */
+    @font-face{
+      font-family: "DeardorfDrip";
+      src: url("./Deardorf%20Drip%20Demo.otf") format("opentype");
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
 
     :root{
       --bg:#e9e9e9;
@@ -29,21 +40,20 @@
     }
 
     html, body{ height:100%; }
-   body{
-  margin:0;
-  overflow:hidden;          /* ✅ stop body scrolling entirely */
-  background:var(--bg);
-  -webkit-text-size-adjust:100%;
-}
-
+    body{
+      margin:0;
+      overflow:hidden;          /* ✅ stop body scrolling entirely */
+      background:var(--bg);
+      -webkit-text-size-adjust:100%;
+    }
 
     /* ✅ pager: use container width (NOT 100vw) */
     .pager{
       width:100%;
       display:flex;
       flex-wrap:nowrap;
-       overflow-x:auto;
-  overflow-y:hidden; 
+      overflow-x:auto;
+      overflow-y:hidden;
       -webkit-overflow-scrolling: touch;
       gap:0;
       padding:0;
@@ -77,19 +87,18 @@
     body.headerCollapsed main{ padding:0 !important; }
     body.headerCollapsed #bars{ gap:0 !important; }
 
-  header{
-  position:fixed;           /* ✅ fixed header */
-  top:0; left:0; right:0;
-  z-index:20;
-  background:var(--bg);
-  border-bottom:1px solid rgba(0,0,0,.06);
-  padding:8px 10px;
+    header{
+      position:fixed;           /* ✅ fixed header */
+      top:0; left:0; right:0;
+      z-index:20;
+      background:var(--bg);
+      border-bottom:1px solid rgba(0,0,0,.06);
+      padding:8px 10px;
 
-  max-height:28vh;          /* keep your behavior */
-  overflow:auto;
-  -webkit-overflow-scrolling:touch;
-}
- 
+      max-height:28vh;          /* keep your behavior */
+      overflow:auto;
+      -webkit-overflow-scrolling:touch;
+    }
 
     body.fullMode header{ max-height:16vh; }
     body.fullMode .miniCard{ display:none; }
@@ -116,13 +125,37 @@
       gap:10px;
       margin-bottom:6px;
     }
+
+    /* ✅ SPRAY TITLE: fills the void up to headshot, WITHOUT making header taller */
     .title{
-      font-size:22px;
-      font-weight:1000;
-      letter-spacing:-.3px;
-      line-height:1;
+      flex:1 1 auto;
+      min-width:0;
       margin:0;
+
+      /* keep same top-row height as the headshot so it doesn't grow */
+      height:64px;
+      display:flex;
+      align-items:flex-end;
+
+      font-family:"DeardorfDrip", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      font-weight:400;
+      letter-spacing:.2px;
+      line-height:1;
+
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+
+      /* scale to fill available width */
+      font-size: clamp(20px, 6.4vw, 36px);
+
+      /* a little spray vibe without changing layout */
+      text-shadow:
+        0 2px 0 rgba(0,0,0,.08),
+        0 8px 18px rgba(0,0,0,.10);
+      transform: translateY(2px);
     }
+
     .small{
       font-size:12px;
       color:var(--muted);
@@ -286,24 +319,23 @@
       border-radius:14px;
     }
 
-   main{
-  position:fixed;              /* ✅ main is the viewport below header */
-  left:0; right:0; bottom:0;
-  top:var(--headerH, 220px);   /* ✅ JS will set this */
-  overflow:hidden;
-  padding:10px 10px 26px;
-}
+    main{
+      position:fixed;              /* ✅ main is the viewport below header */
+      left:0; right:0; bottom:0;
+      top:var(--headerH, 220px);   /* ✅ JS will set this */
+      overflow:hidden;
+      padding:10px 10px 26px;
+    }
 
-#bars{
-  height:100%;
-  overflow-y:auto;             /* ✅ ONLY vertical scroll lives here */
-  -webkit-overflow-scrolling:touch;
+    #bars{
+      height:100%;
+      overflow-y:auto;             /* ✅ ONLY vertical scroll lives here */
+      -webkit-overflow-scrolling:touch;
 
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-}
-
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
 
     .toast{
       position:fixed;
@@ -714,7 +746,7 @@
   (function(){
     const repo = (location.pathname.split("/").filter(Boolean)[0] || "");
     const base = repo ? ("/" + repo) : "";
-    const v = "SHARED_20260215_CENTER_SCROLL_WRAP_FIX_v2";
+    const v = "SHARED_20260215_CENTER_SCROLL_WRAP_FIX_v2_SPRAYFONT";
 
     const man = document.getElementById("appManifest");
     if(man) man.href = base + "/manifest.webmanifest?v=" + encodeURIComponent(v);
