@@ -1383,7 +1383,8 @@ function shouldIgnoreSwipeStart(target){
 function setupOnePageSwipe(pagerEl, p){
   // ✅ allow vertical page scroll by default
   pagerEl.style.touchAction = "pan-y pinch-zoom";
-  pagerEl.style.overscrollBehavior = "contain";
+  pagerEl.style.overscrollBehaviorX = "contain"; // keep sideways paging contained
+pagerEl.style.overscrollBehaviorY = "auto";    // allow vertical scrolling to pass through
   pagerEl.style.webkitOverflowScrolling = "touch";
   pagerEl.style.scrollBehavior = "auto";
 
