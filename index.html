@@ -1,4 +1,4 @@
-<!-- index.html (FULL REPLACE v_HOBO_BEATSHEET_NO_BACKING_PANEL_SYNC_TO_BPM) -->
+<!-- index.html (FULL REPLACE v_HOBO_BEATSHEET_IDB_ONE_PAGE_SWIPE) -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -27,7 +27,7 @@
       --okgreen:#35d07f;
     }
 
-    /* ✅ HIDE MODE: horizontal page swiper */
+    /* ✅ HIDE MODE: horizontal page swiper (tight) */
     .pager{
       width:100vw;
       display:flex;
@@ -38,6 +38,10 @@
       gap:0;
       padding:0;
       margin:0;
+
+      /* ✅ CSS snap helps the feel */
+      scroll-snap-type: x mandatory;
+      scroll-behavior: auto;
     }
     .pager::-webkit-scrollbar{ display:none; }
 
@@ -49,11 +53,14 @@
       max-width:100vw;
       overflow-x:hidden;
       padding:10px 10px 26px;
+
+      /* ✅ snap each page */
+      scroll-snap-align: start;
+      scroll-snap-stop: always;
     }
 
     body.headerCollapsed main{ padding:0 !important; }
     body.headerCollapsed #bars{ gap:0 !important; }
-
     body{ overflow-x:hidden; }
 
     header{
@@ -615,7 +622,6 @@
       box-shadow:0 6px 14px rgba(0,0,0,.08);
     }
 
-    /* hidden file input */
     #mp3Input{ display:none; }
   </style>
 </head>
@@ -640,7 +646,6 @@
       <button id="exportBtn" type="button">Export</button>
       <button id="saveBtn" type="button">Save</button>
 
-      <!-- ✅ Upload audio (goes to Recordings) -->
       <button id="mp3Btn" class="mp3Btn" type="button" aria-label="Upload audio" title="Upload audio to Recordings">⬆</button>
       <input id="mp3Input" type="file" accept="audio/*" />
 
@@ -706,7 +711,7 @@
   (function(){
     const repo = (location.pathname.split("/").filter(Boolean)[0] || "");
     const base = repo ? ("/" + repo) : "";
-    const v = "SHARED_20260214_NO_BACKING_PANEL_SYNC_TO_BPM";
+    const v = "SHARED_20260214_IDB_ONE_PAGE_SWIPE";
 
     const man = document.getElementById("appManifest");
     if(man) man.href = base + "/manifest.webmanifest?v=" + encodeURIComponent(v);
