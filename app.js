@@ -1264,10 +1264,36 @@ function applyFullTextToProject(p, fullText){
   let currentKey = null;
   let writeIndex = 0;
 
+  // clear all sections first
   for(const key of FULL_ORDER){
     const sec = p.sections[key];
     if(sec?.bars) sec.bars.forEach(b => b.text = "");
   }
+
+  function headingToKey(line){
+    const up = String(line||"").trim().toUpperCase();
+    const def = SECTION_DEFS.find(s => s.title.toUpperCase() === up);
+    return def ? def.key : null;
+  }
+
+  for(const raw of lines){
+    const key = headingToKey(raw);
+    if(key){ currentKey = key; writeIndex = 0; continue; }
+    if(!currentKey) continue;
+
+    const txt = String(raw||"").replace(/\s+$/,"");
+    if(!txt.trim()) continue;
+
+    const sec = p.sections[currentKey];
+    if(!sec?.bars) continue;
+    if(writeIndex >= sec.bars.length) continue;
+
+    sec.bars[writeIndex].text = txt;
+    writeIndex++;
+  }
+
+  touchProject(p);
+}
 function syncSectionCardsFromProject(p){
   const areas = document.querySelectorAll('textarea[data-sec][data-idx]');
   areas.forEach(ta=>{
@@ -1279,7 +1305,6 @@ function syncSectionCardsFromProject(p){
     const val = bar.text || "";
     if(ta.value !== val) ta.value = val;
 
-    // Update syllables + beats UI for this card
     const wrap = ta.closest(".bar");
     if(!wrap) return;
 
@@ -1301,28 +1326,6 @@ function syncSectionCardsFromProject(p){
   });
 }
 
-  function headingToKey(line){
-    const up = String(line||"").trim().toUpperCase();
-    const def = SECTION_DEFS.find(s => s.title.toUpperCase() === up);
-    return def ? def.key : null;
-  }
-
-  for(const raw of lines){
-    const key = headingToKey(raw);
-    if(key){ currentKey = key; writeIndex = 0; continue; }
-    if(!currentKey) continue;
-    if(!String(raw).trim()) continue;
-
-    const sec = p.sections[currentKey];
-    if(!sec?.bars) continue;
-    if(writeIndex >= sec.bars.length) continue;
-
-    sec.bars[writeIndex].text = raw.replace(/\s+$/,"");
-    writeIndex++;
-  }
-
-  touchProject(p);
-}
 function updateRhymesFromFullCaret(fullTa){
   if(!fullTa) return;
   const text = fullTa.value || "";
@@ -1417,8 +1420,13 @@ function setActiveSectionFromIdx(p, idx){
 
 function shouldIgnoreSwipeStart(target){
   if(!target) return false;
+
+  // ✅ allow swiping even if you start on the FULL editor textarea
+  if(target.closest(".fullEditor")) return false;
+
   return !!target.closest("textarea, input, select, button, .rhymeDock, .iconBtn, .projIconBtn");
 }
+
 
 function setupOnePageSwipe(pagerEl, p){
   // ✅ allow vertical page scroll by default
