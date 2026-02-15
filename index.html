@@ -1,4 +1,4 @@
-<!-- index.html (FULL REPLACE v_HOBO_BEATSHEET_IDB_SIMPLE_PAGER_CENTER_SCROLL_v2_SPRAYFONT_FIX1) -->
+<!-- index.html (FULL REPLACE v_HOBO_BEATSHEET_IDB_SIMPLE_PAGER_CENTER_SCROLL_v2_SPRAYFONT) -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -12,7 +12,9 @@
     /* ✅ real global box sizing */
     *, *::before, *::after{ box-sizing:border-box; }
 
-    /* ✅ YOUR UPLOADED SPRAY PAINT FONT */
+    /* ✅ YOUR UPLOADED SPRAY PAINT FONT
+       IMPORTANT: put the .otf file in the SAME folder as this index.html on GitHub Pages.
+       If you rename the file (recommended), update the url(...) below to match exactly. */
     @font-face{
       font-family: "DeardorfDrip";
       src: url("./Deardorf%20Drip%20Demo.otf") format("opentype");
@@ -58,7 +60,7 @@
       margin:0;
       scroll-snap-type: x mandatory;
       scroll-behavior: auto;
-      touch-action: pan-x pan-y pinch-zoom;
+      touch-action: pan-x pan-y pinch-zoom; /* ✅ allow horizontal swipe */
     }
     .pager::-webkit-scrollbar{ display:none; }
 
@@ -67,7 +69,7 @@
       width:100%;
       max-width:100%;
       overflow-x:hidden;
-      padding:10px 0 26px;
+      padding:10px 0 26px;  /* ✅ use main padding instead */
       scroll-snap-align: start;
       scroll-snap-stop: always;
     }
@@ -86,14 +88,14 @@
     body.headerCollapsed #bars{ gap:0 !important; }
 
     header{
-      position:fixed;
+      position:fixed;           /* ✅ fixed header */
       top:0; left:0; right:0;
       z-index:20;
       background:var(--bg);
       border-bottom:1px solid rgba(0,0,0,.06);
       padding:8px 10px;
 
-      max-height:28vh;
+      max-height:28vh;          /* keep your behavior */
       overflow:auto;
       -webkit-overflow-scrolling:touch;
     }
@@ -116,54 +118,44 @@
     body.headerCollapsed .stickyTools{ margin-top:0; }
     body.headerCollapsed .headerToggleRow{ display:flex; }
 
-    /* ✅ TITLE ROW (fixed) */
-    .titleRow{
-      display:flex;
-      align-items:flex-end;
-      justify-content:space-between;
-      gap:6px;
-      margin-bottom:6px;
+.titleRow{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:4px;                 /* was 10px — tighter so title can reach further */
+  margin-bottom:6px;
+}
 
-      /* ✅ force same-line behavior */
-      flex-wrap:nowrap;
-    }
+/* ✅ SPRAY TITLE: fill gap visually, but never push/cover headshot */
+.title{
+  flex:1 1 auto;
+  min-width:0;
+  margin:0;
 
-    /* ✅ SPRAY TITLE: fills space but NEVER pushes headshot down */
-    .title{
-      flex:1 1 auto;
-      min-width:0;
-      margin:0;
-      padding-right:6px;
+  height:64px;
+  display:flex;
+  align-items:flex-end;
 
-      /* ✅ lock row height so it can't grow */
-      height:64px;
-      display:flex;
-      align-items:flex-end;
+  font-family:"DeardorfDrip", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-weight:400;
+  letter-spacing:.2px;
+  line-height:1;
 
-      font-family:"DeardorfDrip", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      font-weight:400;
-      line-height:1;
-      letter-spacing:.2px;
+  white-space:nowrap;
+  overflow:hidden;         /* ✅ clips safely before headshot */
+  text-overflow:clip;      /* ellipsis looks weird with graffiti fonts */
 
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:clip;
+  /* a bit bigger so it fills more */
+  font-size: clamp(24px, 8.6vw, 54px);
 
-      /* keep it big, but not so big that it forces layout weirdness */
-      font-size: clamp(24px, 9.0vw, 54px);
+  text-shadow:
+    0 2px 0 rgba(0,0,0,.08),
+    0 8px 18px rgba(0,0,0,.10);
 
-      /* ✅ bright highlighter blue + green */
-      color:#00E5FF;
-      text-shadow:
-        2px 1px 0 #39FF14,
-        4px 2px 0 rgba(57,255,20,.85),
-        7px 4px 10px rgba(57,255,20,.30),
-        2px 2px 0 rgba(0,229,255,.95),
-        6px 6px 14px rgba(0,229,255,.22);
-
-      transform-origin:left bottom;
-      transform: translateY(2px) scaleX(1.28); /* safer so it won't visually “jump” */
-    }
+  /* ✅ THIS is the magic: widens the paint without changing layout */
+  transform-origin:left bottom;
+  transform: translateY(2px) scaleX(1.22);
+}
 
     .small{
       font-size:12px;
@@ -214,6 +206,7 @@
       border-radius:12px;
     }
 
+    /* ✅ Upload button (circle) */
     .mp3Btn{
       width:40px;
       height:40px;
@@ -248,9 +241,7 @@
       border:0;
       box-shadow:none;
       pointer-events:none;
-      display:block;
     }
-
     .eyeDot{
       position:absolute;
       width:10px;
@@ -330,17 +321,18 @@
     }
 
     main{
-      position:fixed;
+      position:fixed;              /* ✅ main is the viewport below header */
       left:0; right:0; bottom:0;
-      top:var(--headerH, 220px);
+      top:var(--headerH, 220px);   /* ✅ JS will set this */
       overflow:hidden;
       padding:10px 10px 26px;
     }
 
     #bars{
       height:100%;
-      overflow-y:auto;
+      overflow-y:auto;             /* ✅ ONLY vertical scroll lives here */
       -webkit-overflow-scrolling:touch;
+
       display:flex;
       flex-direction:column;
       gap:10px;
@@ -461,6 +453,61 @@
       box-shadow:0 4px 10px rgba(0,0,0,.04);
     }
 
+    .bar{
+      background:var(--card);
+      border:1px solid var(--stroke);
+      border-radius:18px;
+      padding:10px;
+      box-shadow:var(--shadow);
+    }
+    .barTop{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      margin-bottom:8px;
+      gap:10px;
+    }
+    .barLeft{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      min-width:0;
+    }
+    .barNum{
+      width:34px;
+      height:34px;
+      border-radius:12px;
+      border:1px solid rgba(0,0,0,.14);
+      background:#fff;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:1000;
+      flex:0 0 auto;
+    }
+    .syllPill{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:8px 12px;
+      border-radius:999px;
+      border:2px solid rgba(0,0,0,.12);
+      background:#fff;
+      font-weight:1000;
+      min-width:160px;
+      flex:0 0 auto;
+    }
+    .syllPill .lbl{
+      font-size:10px;
+      color:rgba(0,0,0,.55);
+      text-transform:uppercase;
+      letter-spacing:.7px;
+    }
+    .syllPill .val{ font-size:16px; }
+    .syllPill.green{ border-color: rgba(53, 208, 127, .9); box-shadow: 0 0 0 4px rgba(53, 208, 127, .20); }
+    .syllPill.yellow{ border-color: rgba(255, 213, 74, .95); box-shadow:0 0 0 4px rgba(255, 213, 74, .22); }
+    .syllPill.red{ border-color: rgba(255, 43, 43, .9); box-shadow:0 0 0 4px rgba(255, 43, 43, .18); }
+
     textarea{
       width:100%;
       min-height:96px;
@@ -474,6 +521,146 @@
       font-weight:900;
       outline:none;
     }
+
+    .beats{
+      margin-top:10px;
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:10px;
+    }
+    .beat{
+      min-height:70px;
+      border-radius:16px;
+      border:1px solid rgba(0,0,0,.14);
+      background:#fff;
+      padding:10px;
+      font-weight:1000;
+      overflow-wrap:anywhere;
+    }
+    .beat.snare{ background:var(--snare); }
+    .beat.flash{
+      background:var(--hl) !important;
+      box-shadow:0 0 0 4px rgba(255,230,106,.45);
+    }
+
+    .fullBox{
+      background:#fff;
+      border:1px solid var(--stroke);
+      border-radius:18px;
+      padding:12px;
+      box-shadow:var(--shadow);
+      font-weight:900;
+      line-height:1.35;
+      font-size:15px;
+    }
+    .fullSub{
+      color:var(--muted);
+      font-weight:1000;
+      font-size:12px;
+      margin-bottom:8px;
+    }
+    .fullEditor{
+      width:100%;
+      height:78vh;
+      min-height:520px;
+      resize:vertical;
+      padding:12px;
+      border-radius:16px;
+      border:1px solid rgba(0,0,0,.18);
+      background:#fff;
+      font-size:16px;
+      line-height:1.35;
+      font-weight:900;
+      outline:none;
+      white-space:pre-wrap;
+    }
+
+    .audioItem{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      justify-content:space-between;
+      flex-wrap:wrap;
+      margin-top:8px;
+    }
+    .audioLabel{
+      font-weight:1000;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      max-width:100%;
+    }
+    .iconRow{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      flex:0 0 auto;
+    }
+    .iconBtn{
+      width:38px;
+      height:38px;
+      padding:0;
+      border-radius:999px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:16px;
+      font-weight:1000;
+      line-height:1;
+      box-shadow:0 6px 14px rgba(0,0,0,.08);
+    }
+    .iconBtn.play{ border-color: rgba(53, 208, 127, .65); background: rgba(53, 208, 127, .18); color:#0f5132; }
+    .iconBtn.stop{ border-color: rgba(0,0,0,.35); background: rgba(0,0,0,.08); color:#111; }
+    .iconBtn.delete{ border-color: rgba(255, 43, 43, .55); background: rgba(255, 43, 43, .12); color:#7f1d1d; }
+
+    .headerToggleRow{
+      display:none;
+      align-items:center;
+      justify-content:flex-end;
+      margin-bottom:8px;
+    }
+    .headerToggleBtn{
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:1000;
+      box-shadow:0 4px 10px rgba(0,0,0,.04);
+      white-space:nowrap;
+    }
+
+    .projRow{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      width:100%;
+      margin-bottom:8px;
+      flex-wrap:nowrap;
+      overflow:hidden;
+      min-width:0;
+    }
+    .projSelect{
+      font-weight:1000;
+      flex:1 1 auto;
+      min-width:0;
+      max-width:220px;
+      padding-right:8px;
+    }
+    .projIconBtn{
+      width:38px;
+      height:38px;
+      padding:0;
+      border-radius:999px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:16px;
+      font-weight:1000;
+      line-height:1;
+      flex:0 0 auto;
+      box-shadow:0 6px 14px rgba(0,0,0,.08);
+    }
+
+    #mp3Input{ display:none; }
   </style>
 </head>
 
@@ -514,9 +701,9 @@
         <option>Loading…</option>
       </select>
 
-      <button id="editProjectBtn" class="projIconBtn" type="button" title="Edit" aria-label="Edit">✏️</button>
-      <button id="newProjectBtn" class="projIconBtn" type="button" title="New" aria-label="New">＋</button>
-      <button id="copyProjectBtn" class="projIconBtn" type="button" title="Copy" aria-label="Copy">C</button>
+      <button id="editProjectBtn"   class="projIconBtn" type="button" title="Edit"   aria-label="Edit">✏️</button>
+      <button id="newProjectBtn"    class="projIconBtn" type="button" title="New"    aria-label="New">＋</button>
+      <button id="copyProjectBtn"   class="projIconBtn" type="button" title="Copy"   aria-label="Copy">C</button>
       <button id="deleteProjectBtn" class="projIconBtn" type="button" title="Delete" aria-label="Delete">✕</button>
     </div>
 
@@ -560,7 +747,7 @@
   (function(){
     const repo = (location.pathname.split("/").filter(Boolean)[0] || "");
     const base = repo ? ("/" + repo) : "";
-    const v = "SHARED_20260215_CENTER_SCROLL_WRAP_FIX_v2_SPRAYFONT_FIX1";
+    const v = "SHARED_20260215_CENTER_SCROLL_WRAP_FIX_v2_SPRAYFONT";
 
     const man = document.getElementById("appManifest");
     if(man) man.href = base + "/manifest.webmanifest?v=" + encodeURIComponent(v);
