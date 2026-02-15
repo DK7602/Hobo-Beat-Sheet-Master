@@ -1,4 +1,4 @@
-<!-- index.html (FULL REPLACE v_DRUMS5_ICONPROJ_INF_TABS) -->
+<!-- index.html (FULL REPLACE v_DRUMS5_ICONPROJ_INF_TABS_MP3SYNC) -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -11,9 +11,7 @@
   <style>
     :root{
       /* ✅ CRITICAL: makes 100vw include padding/border (fixes snap drift) */
-*, *::before, *::after{
-  box-sizing: border-box;
-}
+      *, *::before, *::after{ box-sizing:border-box; }
 
       --bg:#e9e9e9;
       --card:#ffffff;
@@ -29,47 +27,41 @@
       --yellow:#ffd54a;
       --okgreen:#35d07f;
     }
-/* ✅ HIDE MODE: horizontal page swiper (cards are inside pages) */
-.pager{
-  width:100vw;
-  display:flex;
-  flex-wrap:nowrap;
-  overflow-x:auto;
-  overflow-y:hidden;
-  -webkit-overflow-scrolling: touch;
-  
-  gap:0;
-  padding:0;
-  margin:0;
-}
-.pager::-webkit-scrollbar{ display:none; }
 
-.pageGroup{
-  display:flex;
-  flex:0 0 auto;
-  gap:0;
-}
+    /* ✅ HIDE MODE: horizontal page swiper (cards are inside pages) */
+    .pager{
+      width:100vw;
+      display:flex;
+      flex-wrap:nowrap;
+      overflow-x:auto;
+      overflow-y:hidden;
+      -webkit-overflow-scrolling: touch;
+      gap:0;
+      padding:0;
+      margin:0;
+    }
+    .pager::-webkit-scrollbar{ display:none; }
 
-.page{
-  flex:0 0 100vw;     /* ✅ key fix */
-  width:100vw;        /* ✅ key fix */
-  max-width:100vw;
- 
-  overflow-x:hidden;
-  padding:10px 10px 26px;
-}
+    .pageGroup{
+      display:flex;
+      flex:0 0 auto;
+      gap:0;
+    }
 
-/* ✅ In hide mode, let the pager use the full screen width */
-body.headerCollapsed main{
-  padding:0 !important;
-}
-body.headerCollapsed #bars{
-  gap:0 !important;
-}
+    .page{
+      flex:0 0 100vw;
+      width:100vw;
+      max-width:100vw;
+      overflow-x:hidden;
+      padding:10px 10px 26px;
+    }
 
-/* ✅ stop anything from forcing sideways width */
-body{ overflow-x:hidden; }
+    /* ✅ In hide mode, let the pager use the full screen width */
+    body.headerCollapsed main{ padding:0 !important; }
+    body.headerCollapsed #bars{ gap:0 !important; }
 
+    /* ✅ stop anything from forcing sideways width */
+    body{ overflow-x:hidden; }
 
     header{
       position:sticky;
@@ -167,6 +159,27 @@ body{ overflow-x:hidden; }
       border-radius:12px;
     }
 
+    /* ✅ MP3 circle upload/stop button */
+    .mp3Btn{
+      width:40px;
+      height:40px;
+      padding:0;
+      border-radius:999px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:18px;
+      font-weight:1000;
+      line-height:1;
+      box-shadow:0 6px 14px rgba(0,0,0,.08);
+      flex:0 0 auto;
+    }
+    .mp3Btn.playing{
+      border-color: rgba(255, 43, 43, .55);
+      background: rgba(255, 43, 43, .12);
+      color:#7f1d1d;
+    }
+
     /* ✅ headshot back to top-right */
     .headshotWrap{
       position:relative;
@@ -255,13 +268,11 @@ body{ overflow-x:hidden; }
       font-size:18px;
       line-height:1;
     }
-    /* ✅ only ACTIVE drum is black */
     .drumBtn.active{
       background:#111;
       color:#fff;
       border-color:#111;
     }
-    /* optional: show metronome running without turning all black */
     .drumBtn.running{
       box-shadow: 0 0 0 4px rgba(0,0,0,.08);
     }
@@ -284,7 +295,7 @@ body{ overflow-x:hidden; }
       box-shadow:0 6px 14px rgba(0,0,0,.05);
       display:flex;
       flex-direction:column;
-      gap:8px;
+      gap:10px;
       min-width:0;
       margin-top:10px;
     }
@@ -294,6 +305,54 @@ body{ overflow-x:hidden; }
       font-size:15px;
       font-weight:1000;
       border-radius:14px;
+    }
+
+    /* ✅ MP3 sync panel */
+    .mp3Panel{
+      border:1px solid rgba(0,0,0,.10);
+      border-radius:14px;
+      padding:10px 10px;
+      background: rgba(0,0,0,.02);
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+    .mp3Row{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .mp3Name{
+      font-weight:1000;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      max-width:70%;
+    }
+    .mp3Controls{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+    .mp3Controls label{
+      font-size:10px;
+      font-weight:1000;
+      color:var(--muted);
+      text-transform:uppercase;
+      letter-spacing:.6px;
+    }
+    .mp3Controls input[type="number"]{
+      width:72px;
+    }
+    .tapBtn{
+      border-radius:999px;
+      padding:8px 10px;
+      font-size:12px;
+      font-weight:1000;
+      box-shadow:0 4px 10px rgba(0,0,0,.04);
+      white-space:nowrap;
     }
 
     main{ padding:10px 10px 26px; }
@@ -546,11 +605,10 @@ body{ overflow-x:hidden; }
     }
     .audioLabel{
       font-weight:1000;
-      flex:1;
-      min-width:150px;
       overflow:hidden;
       text-overflow:ellipsis;
       white-space:nowrap;
+      max-width:100%;
     }
     .iconRow{
       display:flex;
@@ -597,20 +655,17 @@ body{ overflow-x:hidden; }
       align-items:center;
       width:100%;
       margin-bottom:8px;
-
       flex-wrap:nowrap;
-      overflow:hidden;     /* prevents sideways scroll */
+      overflow:hidden;
       min-width:0;
     }
-    /* ✅ shorten project select */
     .projSelect{
       font-weight:1000;
       flex:1 1 auto;
       min-width:0;
-      max-width:220px;     /* shorten box */
+      max-width:220px;
       padding-right:8px;
     }
-    /* ✅ circle icon buttons */
     .projIconBtn{
       width:38px;
       height:38px;
@@ -625,6 +680,9 @@ body{ overflow-x:hidden; }
       flex:0 0 auto;
       box-shadow:0 6px 14px rgba(0,0,0,.08);
     }
+
+    /* hidden file input */
+    #mp3Input{ display:none; }
   </style>
 </head>
 
@@ -647,6 +705,10 @@ body{ overflow-x:hidden; }
     <div class="topRow">
       <button id="exportBtn" type="button">Export</button>
       <button id="saveBtn" type="button">Save</button>
+
+      <!-- ✅ MP3 Upload/Stop (same button) -->
+      <button id="mp3Btn" class="mp3Btn" type="button" aria-label="Upload MP3" title="Upload MP3 backing track">⬆</button>
+      <input id="mp3Input" type="file" accept="audio/*" />
 
       <div class="pill">
         <label>BPM</label>
@@ -680,9 +742,23 @@ body{ overflow-x:hidden; }
     </div>
 
     <div class="miniCard">
+      <!-- ✅ MP3 Sync Panel -->
+      <div class="mp3Panel">
+        <div class="mp3Row">
+          <div class="small">Backing Track</div>
+          <div class="mp3Name" id="mp3Name">No MP3 loaded</div>
+        </div>
+        <div class="mp3Controls">
+          <label for="mp3Offset">Offset</label>
+          <input id="mp3Offset" type="number" min="0" step="0.01" value="0" />
+          <button id="tapSyncBtn" class="tapBtn" type="button">Tap Beat 1</button>
+          <div class="small" style="flex:1 1 auto;">(play MP3 → tap on Beat 1)</div>
+        </div>
+      </div>
+
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;">
         <div style="font-size:11px;font-weight:1000;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;">Recording</div>
-        <div id="recHint" style="font-size:13px;font-weight:1000;max-width:65%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">voice + metronome</div>
+        <div id="recHint" style="font-size:13px;font-weight:1000;max-width:65%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">voice + backing + metronome</div>
       </div>
 
       <input id="recordName" class="wideInput" type="text" placeholder="Recording name…" />
@@ -711,7 +787,7 @@ body{ overflow-x:hidden; }
   (function(){
     const repo = (location.pathname.split("/").filter(Boolean)[0] || "");
     const base = repo ? ("/" + repo) : "";
-    const v = "SHARED_20260214_DRUMS5_ICONPROJ_INF_TABS_2";
+    const v = "SHARED_20260214_DRUMS5_ICONPROJ_INF_TABS_MP3SYNC";
 
     const man = document.getElementById("appManifest");
     if(man) man.href = base + "/manifest.webmanifest?v=" + encodeURIComponent(v);
