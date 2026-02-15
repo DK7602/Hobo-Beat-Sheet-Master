@@ -1395,8 +1395,8 @@ function setupOnePageSwipe(pagerEl, p){
   let startScroll = 0;
   let startIdx = 0;
 
-  const H_START = 26;  // needs a stronger horizontal move
-  const V_CANCEL = 10; // if user moves vertically first, abandon swipe
+  const H_START = 26;
+  const V_CANCEL = 10;
 
   const onStart = (clientX, clientY)=>{
     tracking = true;
@@ -1414,22 +1414,19 @@ function setupOnePageSwipe(pagerEl, p){
     const dx = clientX - startX;
     const dy = clientY - startY;
 
-    // If user is clearly scrolling vertically first, abandon swipe tracking
     if(!horizontalLock){
       if(Math.abs(dy) > V_CANCEL && Math.abs(dy) > Math.abs(dx)){
         tracking = false;
         pagerEl.classList.remove("dragging");
         return;
       }
-      // Lock only when clearly horizontal
       if(Math.abs(dx) > H_START && Math.abs(dx) > Math.abs(dy) * 1.2){
         horizontalLock = true;
       }else{
-        return; // don't interfere until locked
+        return;
       }
     }
 
-    // Once locked, drag horizontally
     pagerEl.scrollLeft = startScroll - dx;
   };
 
@@ -1465,7 +1462,6 @@ function setupOnePageSwipe(pagerEl, p){
     pagerEl.classList.remove("dragging");
   };
 
-  // Touch events (mobile)
   pagerEl.addEventListener("touchstart", (e)=>{
     if(shouldIgnoreSwipeStart(e.target)) return;
     const t = e.touches[0];
@@ -1482,7 +1478,6 @@ function setupOnePageSwipe(pagerEl, p){
   pagerEl.addEventListener("touchend", onEnd, { passive:true });
   pagerEl.addEventListener("touchcancel", onEnd, { passive:true });
 
-  // Keep active section in sync after scroll settles (non-drag / momentum)
   let scrollTmr = null;
   pagerEl.addEventListener("scroll", ()=>{
     if(scrollTmr) clearTimeout(scrollTmr);
@@ -1492,6 +1487,7 @@ function setupOnePageSwipe(pagerEl, p){
     }, 120);
   }, { passive:true });
 }
+
 
 /***********************
 ✅ bar rendering helper
