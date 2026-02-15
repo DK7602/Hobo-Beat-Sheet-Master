@@ -1,4 +1,4 @@
-<!-- index.html (FULL REPLACE v_HOBO_BEATSHEET_IDB_SIMPLE_PAGER_CENTER_SCROLL_v2_SPRAYFONT_HLLOCK_v1) -->
+<!-- index.html (FULL REPLACE v_HOBO_BEATSHEET_IDB_SIMPLE_PAGER_CENTER_SCROLL_v2_SPRAYFONT_HLLOCK_v2_NOHSCROLL_OUTLINE) -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -100,6 +100,9 @@
       max-height:28vh;
       overflow:auto;
       -webkit-overflow-scrolling:touch;
+
+      /* ✅ FIX: prevent any accidental horizontal scroll in header area */
+      overflow-x:hidden;
     }
 
     body.fullMode header{ max-height:16vh; }
@@ -125,20 +128,23 @@
       display:flex;
       align-items:flex-end;
       justify-content:space-between;
-      gap:6px;               /* tighter = more room for title */
+      gap:6px;
       margin-bottom:6px;
 
-      flex-wrap:nowrap;      /* ✅ headshot cannot drop */
+      flex-wrap:nowrap;
       min-width:0;
+
+      /* ✅ FIX: make sure this row cannot create horizontal scroll */
+      overflow:hidden;
     }
 
-    /* ✅ TITLE: fill the air without changing row height or bumping headshot */
+    /* ✅ TITLE: keep your size, but stop it from expanding layout width */
     .title{
       flex:1 1 auto;
       min-width:0;
       margin:0;
 
-      height:64px;                 /* locks top-row height */
+      height:64px;
       display:flex;
       align-items:flex-end;
 
@@ -148,25 +154,41 @@
       line-height:1;
 
       white-space:nowrap;
-      overflow:hidden;             /* ✅ clips before headshot */
+      overflow:hidden;
       text-overflow:clip;
 
-      /* a bit bigger, then we stretch horizontally */
+      /* keep same font size */
       font-size: clamp(22px, 7.2vw, 44px);
 
-      /* ✅ bright highlighter blue + green */
+      /* ✅ blue fill */
       color: var(--hlBlue);
+
+      /* ✅ FIX: outline + existing highlighter shadows
+         - First 8 shadows = thin black outline
+         - Then your green/blue spray glow */
       text-shadow:
+        /* thin black outline */
+        -1px 0   0 rgba(0,0,0,.85),
+         1px 0   0 rgba(0,0,0,.85),
+         0  -1px 0 rgba(0,0,0,.85),
+         0   1px 0 rgba(0,0,0,.85),
+        -1px -1px 0 rgba(0,0,0,.65),
+         1px -1px 0 rgba(0,0,0,.65),
+        -1px  1px 0 rgba(0,0,0,.65),
+         1px  1px 0 rgba(0,0,0,.65),
+
+        /* highlighter green under-spray */
         2px 1px 0 var(--hlGreen),
         4px 2px 0 rgba(57,255,20,.85),
         8px 5px 14px rgba(57,255,20,.28),
+
+        /* blue glow */
         2px 2px 0 rgba(0,229,255,.95),
         7px 6px 16px rgba(0,229,255,.22);
 
-      /* ✅ makes it “fill the air” but stays inside its own box */
       transform-origin:left bottom;
       transform: translateY(2px) scaleX(1.85);
-      padding-right:10px;          /* ✅ safety buffer so it never “touches” headshot */
+      padding-right:10px;
     }
 
     .small{
@@ -243,7 +265,7 @@
       justify-content:center;
       pointer-events:none;
 
-      flex:0 0 64px;          /* ✅ cannot shrink, cannot wrap */
+      flex:0 0 64px;
       min-width:64px;
     }
     .bpmHeadshot{
@@ -761,7 +783,7 @@
   (function(){
     const repo = (location.pathname.split("/").filter(Boolean)[0] || "");
     const base = repo ? ("/" + repo) : "";
-    const v = "SHARED_20260215_CENTER_SCROLL_WRAP_FIX_v2_SPRAYFONT_HLLOCK_v1";
+    const v = "SHARED_20260215_CENTER_SCROLL_WRAP_FIX_v2_SPRAYFONT_HLLOCK_v2_NOHSCROLL_OUTLINE";
 
     const man = document.getElementById("appManifest");
     if(man) man.href = base + "/manifest.webmanifest?v=" + encodeURIComponent(v);
