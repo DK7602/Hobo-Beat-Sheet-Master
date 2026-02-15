@@ -118,43 +118,44 @@
     body.headerCollapsed .stickyTools{ margin-top:0; }
     body.headerCollapsed .headerToggleRow{ display:flex; }
 
-    .titleRow{
-      display:flex;
-      align-items:flex-end;
-      justify-content:space-between;
-      gap:10px;
-      margin-bottom:6px;
-    }
+.titleRow{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:4px;                 /* was 10px — tighter so title can reach further */
+  margin-bottom:6px;
+}
 
-    /* ✅ SPRAY TITLE: fills the void up to headshot, WITHOUT making header taller */
-    .title{
-      flex:1 1 auto;
-      min-width:0;
-      margin:0;
+/* ✅ SPRAY TITLE: fill gap visually, but never push/cover headshot */
+.title{
+  flex:1 1 auto;
+  min-width:0;
+  margin:0;
 
-      /* keep same top-row height as the headshot so it doesn't grow */
-      height:64px;
-      display:flex;
-      align-items:flex-end;
+  height:64px;
+  display:flex;
+  align-items:flex-end;
 
-      font-family:"DeardorfDrip", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      font-weight:400;
-      letter-spacing:.2px;
-      line-height:1;
+  font-family:"DeardorfDrip", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-weight:400;
+  letter-spacing:.2px;
+  line-height:1;
 
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
+  white-space:nowrap;
+  overflow:hidden;         /* ✅ clips safely before headshot */
+  text-overflow:clip;      /* ellipsis looks weird with graffiti fonts */
 
-      /* scale to fill available width */
-      font-size: clamp(20px, 6.4vw, 36px);
+  /* a bit bigger so it fills more */
+  font-size: clamp(24px, 8.6vw, 54px);
 
-      /* a little spray vibe without changing layout */
-      text-shadow:
-        0 2px 0 rgba(0,0,0,.08),
-        0 8px 18px rgba(0,0,0,.10);
-      transform: translateY(2px);
-    }
+  text-shadow:
+    0 2px 0 rgba(0,0,0,.08),
+    0 8px 18px rgba(0,0,0,.10);
+
+  /* ✅ THIS is the magic: widens the paint without changing layout */
+  transform-origin:left bottom;
+  transform: translateY(2px) scaleX(1.22);
+}
 
     .small{
       font-size:12px;
