@@ -1268,6 +1268,38 @@ function applyFullTextToProject(p, fullText){
     const sec = p.sections[key];
     if(sec?.bars) sec.bars.forEach(b => b.text = "");
   }
+function syncSectionCardsFromProject(p){
+  const areas = document.querySelectorAll('textarea[data-sec][data-idx]');
+  areas.forEach(ta=>{
+    const secKey = ta.getAttribute("data-sec");
+    const idx = parseInt(ta.getAttribute("data-idx"), 10);
+    const bar = p.sections?.[secKey]?.bars?.[idx];
+    if(!bar) return;
+
+    const val = bar.text || "";
+    if(ta.value !== val) ta.value = val;
+
+    // Update syllables + beats UI for this card
+    const wrap = ta.closest(".bar");
+    if(!wrap) return;
+
+    const n = countSyllablesLine(val);
+    const syllVal = wrap.querySelector(`[data-syll="${secKey}:${idx}"]`);
+    const pill = wrap.querySelector(".syllPill");
+    if(syllVal) syllVal.textContent = n ? String(n) : "";
+    if(pill){
+      pill.classList.remove("red","yellow","green");
+      const g = syllGlowClass(n);
+      if(g) pill.classList.add(g);
+    }
+
+    const beats = computeBeats(val);
+    const beatEls = wrap.querySelectorAll(".beat");
+    for(let i=0;i<4;i++){
+      if(beatEls[i]) beatEls[i].innerHTML = escapeHtml(beats[i] || "");
+    }
+  });
+}
 
   function headingToKey(line){
     const up = String(line||"").trim().toUpperCase();
@@ -1403,6 +1435,7 @@ pagerEl.style.overscrollBehaviorY = "auto";    // allow vertical scrolling to pa
   let startY = 0;
   let startScroll = 0;
   let startIdx = 0;
+  let lastDx = 0;
 
   const H_START = 26;   // horizontal distance before we lock
   const V_CANCEL = 10;  // if vertical wins early, abandon
@@ -1421,14 +1454,21 @@ pagerEl.style.overscrollBehaviorY = "auto";    // allow vertical scrolling to pa
     }
     tracking = false;
 
-    const w = measurePager(pagerEl);
-    const delta = (pagerEl.scrollLeft - (startIdx * w)) / w;
+   const w = measurePager(pagerEl);
+const delta = (pagerEl.scrollLeft - (startIdx * w)) / w;
 
-    let nextIdx = startIdx;
-    if(horizontalLock){
-      if(delta > 0.25) nextIdx = startIdx + 1;
-      else if(delta < -0.25) nextIdx = startIdx - 1;
-    }
+let nextIdx = startIdx;
+if(horizontalLock){
+  // Use swipe direction even when we're at the hard edges (scrollLeft can't move)
+  if(lastDx < -26) nextIdx = startIdx + 1;      // swiped LEFT -> go forward
+  else if(lastDx > 26) nextIdx = startIdx - 1;  // swiped RIGHT -> go back
+  else {
+    // fallback for middle pages: use delta
+    if(delta > 0.25) nextIdx = startIdx + 1;
+    else if(delta < -0.25) nextIdx = startIdx - 1;
+  }
+}
+
 
     nextIdx = wrapIndex(nextIdx);
 
@@ -1459,6 +1499,7 @@ pagerEl.style.overscrollBehaviorY = "auto";    // allow vertical scrolling to pa
 
     const dx = e.clientX - startX;
     const dy = e.clientY - startY;
+    lastDx = dx;
 
     // If user is scrolling vertically first, abandon immediately (do NOT capture)
     if(!horizontalLock){
@@ -1618,7 +1659,11 @@ function renderBars(){
     fullTa.value = buildFullTextFromProject(p);
 
     let tmr = null;
-    const commit = () => applyFullTextToProject(p, fullTa.value || "");
+      const commit = () => {
+      applyFullTextToProject(p, fullTa.value || "");
+      syncSectionCardsFromProject(p); // ✅ update cards instantly
+    };
+
     const refresh = () => { updateRhymesFromFullCaret(fullTa); updateDockForKeyboard(); };
 
     refresh();
