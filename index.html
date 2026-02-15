@@ -119,42 +119,54 @@
     body.headerCollapsed .headerToggleRow{ display:flex; }
 
 .titleRow{
+.titleRow{
   display:flex;
   align-items:flex-end;
   justify-content:space-between;
-  gap:4px;                 /* was 10px — tighter so title can reach further */
+  gap:0px;              /* ✅ remove extra gap so title can use max width */
   margin-bottom:6px;
 }
 
-/* ✅ SPRAY TITLE: fill gap visually, but never push/cover headshot */
+/* ✅ SPRAY TITLE: fill the blank space, never push/cover headshot, no extra height */
 .title{
   flex:1 1 auto;
   min-width:0;
   margin:0;
+  padding-right:6px;    /* tiny safety buffer before headshot */
 
+  /* lock row height so it NEVER gets taller */
   height:64px;
   display:flex;
   align-items:flex-end;
 
   font-family:"DeardorfDrip", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   font-weight:400;
-  letter-spacing:.2px;
   line-height:1;
+  letter-spacing:.2px;
 
   white-space:nowrap;
-  overflow:hidden;         /* ✅ clips safely before headshot */
-  text-overflow:clip;      /* ellipsis looks weird with graffiti fonts */
+  overflow:hidden;      /* ✅ hard clip at edge of title area */
+  text-overflow:clip;
 
-  /* a bit bigger so it fills more */
-  font-size: clamp(24px, 8.6vw, 54px);
+  /* bigger base size */
+  font-size: clamp(28px, 10.5vw, 72px);
 
+  /* ✅ Highlighter BLUE + GREEN “spray” (stacked, bright) */
+  color:#00E5FF; /* highlighter cyan/blue */
   text-shadow:
-    0 2px 0 rgba(0,0,0,.08),
-    0 8px 18px rgba(0,0,0,.10);
+    /* green under-spray */
+    2px 1px 0 #39FF14,
+    4px 2px 0 rgba(57,255,20,.85),
+    7px 4px 10px rgba(57,255,20,.35),
 
-  /* ✅ THIS is the magic: widens the paint without changing layout */
+    /* blue top hit */
+    0px 0px 0 #00E5FF,
+    2px 2px 0 rgba(0,229,255,.95),
+    6px 6px 14px rgba(0,229,255,.28);
+
+  /* ✅ widen to eat the empty space WITHOUT changing layout */
   transform-origin:left bottom;
-  transform: translateY(2px) scaleX(1.22);
+  transform: translateY(2px) scaleX(1.55);
 }
 
     .small{
