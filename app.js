@@ -1347,20 +1347,35 @@ function updateRhymesFromFullCaret(fullTa){
 }
 
 /***********************
-✅ SIMPLE PAGER (FIXED)
-- pages sized to container width (not 100vw)
-- swipe only locks when clearly horizontal (prevents vertical freeze)
-- wraps ends: last -> full, full -> last (Chorus 3 loops to FULL)
+✅ CAROUSEL PAGER (REAL FIX)
+- uses native scroll-snap
+- adds clones so FULL <-> CHORUS 3 wraps reliably on all phones
 ***********************/
+
+// stored keys (real pages only)
+const PAGE_ORDER = ["full", ...FULL_ORDER];
+
+// carousel keys (adds clones at ends)
+const CAROUSEL_ORDER = [
+  PAGE_ORDER[PAGE_ORDER.length - 1], // clone of last (chorus3)
+  ...PAGE_ORDER,                     // real pages
+  PAGE_ORDER[0]                      // clone of first (full)
+];
+
 function buildPager(p){
   const pager = document.createElement("div");
   pager.className = "pager";
   pager.id = "pagesPager";
 
-  for(const key of PAGE_ORDER){
+  CAROUSEL_ORDER.forEach((key, i)=>{
     const page = document.createElement("div");
     page.className = "page";
     page.dataset.pageKey = key;
+
+    // mark clones (first and last)
+    if(i === 0 || i === CAROUSEL_ORDER.length - 1){
+      page.dataset.clone = "1";
+    }
 
     if(key === "full"){
       page.innerHTML = `<div class="pageTitle">FULL</div>`;
@@ -1374,7 +1389,7 @@ function buildPager(p){
       `;
       page.appendChild(box);
       pager.appendChild(page);
-      continue;
+      return;
     }
 
     const title = (SECTION_DEFS.find(s=>s.key===key)?.title || key).toUpperCase();
@@ -1388,7 +1403,7 @@ function buildPager(p){
     renderSectionBarsInto(p, key, mount);
     page.appendChild(mount);
     pager.appendChild(page);
-  }
+  });
 
   return pager;
 }
@@ -1401,17 +1416,23 @@ function measurePager(pagerEl){
 function getCurrentIdx(pagerEl){
   const w = measurePager(pagerEl);
   const idx = Math.round(pagerEl.scrollLeft / w);
-  return Math.max(0, Math.min(PAGE_ORDER.length-1, idx));
+  return Math.max(0, Math.min(CAROUSEL_ORDER.length - 1, idx));
 }
 
 function snapToIdx(pagerEl, idx, behavior="auto"){
   const w = measurePager(pagerEl);
-  idx = Math.max(0, Math.min(PAGE_ORDER.length-1, idx));
+  idx = Math.max(0, Math.min(CAROUSEL_ORDER.length - 1, idx));
   pagerEl.scrollTo({ left: idx * w, behavior });
 }
 
 function setActiveSectionFromIdx(p, idx){
-  const key = PAGE_ORDER[idx] || "full";
+  // translate carousel idx -> real key
+  let key = CAROUSEL_ORDER[idx] || "full";
+
+  // if we're sitting on a clone, map to the real page
+  if(idx === 0) key = PAGE_ORDER[PAGE_ORDER.length - 1];      // last real
+  if(idx === CAROUSEL_ORDER.length - 1) key = PAGE_ORDER[0];  // first real
+
   if(p.activeSection !== key){
     p.activeSection = key;
     touchProject(p);
@@ -1420,198 +1441,55 @@ function setActiveSectionFromIdx(p, idx){
 
 function shouldIgnoreSwipeStart(target){
   if(!target) return false;
-
-  // ✅ DO allow swiping even if you start on any textarea (FULL or bar textareas)
-  // We only block taps on controls where swipe would be annoying.
+  // DO allow starting on textareas, but ignore controls
   return !!target.closest("input, select, button, .rhymeDock, .iconBtn, .projIconBtn");
 }
 
-
-
-function setupOnePageSwipe(pagerEl, p){
-  // ✅ allow native horizontal + vertical gestures
+function setupCarouselPager(pagerEl, p){
+  // allow native horizontal + vertical gestures
   pagerEl.style.touchAction = "pan-x pan-y pinch-zoom";
   pagerEl.style.overscrollBehaviorX = "contain";
   pagerEl.style.overscrollBehaviorY = "auto";
   pagerEl.style.webkitOverflowScrolling = "touch";
   pagerEl.style.scrollBehavior = "auto";
 
-  let tracking = false;
-  let horizontalLock = false;
+  // snap to the correct real page on resize (keeps alignment)
+  window.addEventListener("resize", ()=>{
+    const realIdx = Math.max(0, PAGE_ORDER.indexOf(p.activeSection || "full"));
+    snapToIdx(pagerEl, realIdx + 1, "auto"); // +1 because clone at start
+  });
 
-  let startX = 0;
-  let startY = 0;
-  let startScroll = 0;
-  let startIdx = 0;
-  let lastDx = 0;
-  let lastDy = 0;
+  // if user lands on a clone, jump to the real page
+  let tmr = null;
+  pagerEl.addEventListener("scroll", ()=>{
+    if(tmr) clearTimeout(tmr);
+    tmr = setTimeout(()=>{
+      const idx = getCurrentIdx(pagerEl);
 
-  const H_START = 26;   // horizontal distance before we lock
-  const V_CANCEL = 10;  // if vertical wins early, abandon
-
-  const wrapIndex = (idx)=>{
-    const last = PAGE_ORDER.length - 1;
-    if(idx < 0) return last;
-    if(idx > last) return 0;
-    return idx;
-  };
-
-  const edgeWrapIdxFromDx = ()=>{
-    const last = PAGE_ORDER.length - 1;
-
-    // ✅ FORCE wrap at edges even if scroll can't move / lock never happened
-    if(startIdx === 0 && lastDx > 40) return last;      // FULL -> last (swipe RIGHT)
-    if(startIdx === last && lastDx < -40) return 0;     // last -> FULL (swipe LEFT)
-    return null;
-  };
-
-  const endDrag = ()=>{
-    if(!tracking){
-      pagerEl.classList.remove("dragging");
-      return;
-    }
-    tracking = false;
-
-    const forced = edgeWrapIdxFromDx();
-    if(forced != null){
-      snapToIdx(pagerEl, forced, "smooth");
-      setActiveSectionFromIdx(p, forced);
-      horizontalLock = false;
-      pagerEl.classList.remove("dragging");
-      return;
-    }
-
-    const w = measurePager(pagerEl);
-    const delta = (pagerEl.scrollLeft - (startIdx * w)) / w;
-
-    let nextIdx = startIdx;
-
-    // normal paging
-    if(horizontalLock){
-      if(lastDx < -26) nextIdx = startIdx + 1;      // swipe LEFT -> forward
-      else if(lastDx > 26) nextIdx = startIdx - 1;  // swipe RIGHT -> back
-      else{
-        if(delta > 0.25) nextIdx = startIdx + 1;
-        else if(delta < -0.25) nextIdx = startIdx - 1;
+      // If at left clone -> jump to last real
+      if(idx === 0){
+        const lastRealCarouselIdx = CAROUSEL_ORDER.length - 2; // last real sits here
+        snapToIdx(pagerEl, lastRealCarouselIdx, "auto");
+        setActiveSectionFromIdx(p, lastRealCarouselIdx);
+        return;
       }
-    }else{
-      // if we never locked, still allow snap based on delta
-      if(delta > 0.35) nextIdx = startIdx + 1;
-      else if(delta < -0.35) nextIdx = startIdx - 1;
-    }
 
-    nextIdx = wrapIndex(nextIdx);
+      // If at right clone -> jump to first real
+      if(idx === CAROUSEL_ORDER.length - 1){
+        const firstRealCarouselIdx = 1;
+        snapToIdx(pagerEl, firstRealCarouselIdx, "auto");
+        setActiveSectionFromIdx(p, firstRealCarouselIdx);
+        return;
+      }
 
-    snapToIdx(pagerEl, nextIdx, "smooth");
-    setActiveSectionFromIdx(p, nextIdx);
+      setActiveSectionFromIdx(p, idx);
+    }, 120);
+  }, { passive:true });
 
-    horizontalLock = false;
-    pagerEl.classList.remove("dragging");
-  };
-
-  // -------- Pointer (Android/modern) --------
+  // Optional: prevent accidental swipe-starts on controls
   pagerEl.addEventListener("pointerdown", (e)=>{
     if(e.pointerType === "mouse") return;
     if(shouldIgnoreSwipeStart(e.target)) return;
-
-    tracking = true;
-    horizontalLock = false;
-    lastDx = 0;
-    lastDy = 0;
-
-    startX = e.clientX;
-    startY = e.clientY;
-    startScroll = pagerEl.scrollLeft;
-    startIdx = getCurrentIdx(pagerEl);
-
-    pagerEl.classList.add("dragging");
-  });
-
-  pagerEl.addEventListener("pointermove", (e)=>{
-    if(!tracking) return;
-
-    const dx = e.clientX - startX;
-    const dy = e.clientY - startY;
-    lastDx = dx;
-    lastDy = dy;
-
-    if(!horizontalLock){
-      if(Math.abs(dy) > V_CANCEL && Math.abs(dy) > Math.abs(dx)){
-        tracking = false;
-        pagerEl.classList.remove("dragging");
-        return;
-      }
-      if(Math.abs(dx) > H_START && Math.abs(dx) > Math.abs(dy) * 1.2){
-        horizontalLock = true;
-        try{ pagerEl.setPointerCapture(e.pointerId); }catch{}
-      }else{
-        return;
-      }
-    }
-
-    pagerEl.scrollLeft = startScroll - dx;
-  });
-
-  pagerEl.addEventListener("pointerup", (e)=>{
-    try{ pagerEl.releasePointerCapture(e.pointerId); }catch{}
-    endDrag();
-  });
-
-  pagerEl.addEventListener("pointercancel", (e)=>{
-    try{ pagerEl.releasePointerCapture(e.pointerId); }catch{}
-    endDrag();
-  });
-
-  // -------- Touch fallback (iOS “edge swipe” reliability) --------
-  pagerEl.addEventListener("touchstart", (e)=>{
-    if(shouldIgnoreSwipeStart(e.target)) return;
-    const t = e.touches && e.touches[0];
-    if(!t) return;
-
-    tracking = true;
-    horizontalLock = false;
-    lastDx = 0;
-    lastDy = 0;
-
-    startX = t.clientX;
-    startY = t.clientY;
-    startScroll = pagerEl.scrollLeft;
-    startIdx = getCurrentIdx(pagerEl);
-
-    pagerEl.classList.add("dragging");
-  }, { passive:true });
-
-  pagerEl.addEventListener("touchmove", (e)=>{
-    if(!tracking) return;
-    const t = e.touches && e.touches[0];
-    if(!t) return;
-
-    const dx = t.clientX - startX;
-    const dy = t.clientY - startY;
-    lastDx = dx;
-    lastDy = dy;
-
-    // we don’t need to preventDefault; we only use this for reliable edge-wrap
-  }, { passive:true });
-
-  pagerEl.addEventListener("touchend", ()=>{
-    if(!tracking) return;
-    endDrag();
-  }, { passive:true });
-
-  pagerEl.addEventListener("touchcancel", ()=>{
-    if(!tracking) return;
-    endDrag();
-  }, { passive:true });
-
-  // Keep active section in sync after scroll settles (momentum / manual scroll)
-  let scrollTmr = null;
-  pagerEl.addEventListener("scroll", ()=>{
-    if(scrollTmr) clearTimeout(scrollTmr);
-    scrollTmr = setTimeout(()=>{
-      const idx = getCurrentIdx(pagerEl);
-      setActiveSectionFromIdx(p, idx);
-    }, 120);
   }, { passive:true });
 }
 
@@ -1750,11 +1628,11 @@ function renderBars(){
     fullTa.addEventListener("focus", refresh);
   }
 
-  // snap to saved page
-  const idx = Math.max(0, PAGE_ORDER.indexOf(p.activeSection || "full"));
-  snapToIdx(pager, idx, "auto");
+  // snap to saved REAL page (offset by 1 because clone is at index 0)
+  const realIdx = Math.max(0, PAGE_ORDER.indexOf(p.activeSection || "full"));
+  snapToIdx(pager, realIdx + 1, "auto");
 
-  setupOnePageSwipe(pager, p);
+  setupCarouselPager(pager, p);
 }
 
 /***********************
