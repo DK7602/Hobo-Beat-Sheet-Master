@@ -1381,20 +1381,25 @@ function shouldIgnoreSwipeStart(target){
 }
 
 function setupOnePageSwipe(pagerEl, p){
-  pagerEl.style.touchAction = "pan-y";
+  // ✅ prioritize vertical scroll everywhere; only grab when clearly horizontal
+  pagerEl.style.touchAction = "pan-y pinch-zoom";
   pagerEl.style.overscrollBehavior = "contain";
   pagerEl.style.webkitOverflowScrolling = "touch";
   pagerEl.style.scrollBehavior = "auto";
 
-  let dragging = false;
+  let tracking = false;
   let horizontalLock = false;
+
   let startX = 0;
   let startY = 0;
   let startScroll = 0;
   let startIdx = 0;
 
+  const H_START = 26;       // needs a stronger horizontal move than before
+  const V_CANCEL = 10;      // if user moves vertically a bit first, abandon swipe
+
   const onStart = (clientX, clientY)=>{
-    dragging = true;
+    tracking = true;
     horizontalLock = false;
     startX = clientX;
     startY = clientY;
@@ -1402,6 +1407,127 @@ function setupOnePageSwipe(pagerEl, p){
     startIdx = getCurrentIdx(pagerEl);
     pagerEl.classList.add("dragging");
   };
+
+  const onMove = (clientX, clientY, e)=>{
+    if(!tracking) return;
+
+    const dx = clientX - startX;
+    const dy = clientY - startY;
+
+    const absX = Math.abs(dx);
+    const absY = Math.abs(dy);
+
+    // ✅ If user is scrolling vertically (even a little), bail immediately.
+    // This makes "scroll up/down anywhere" feel like the header area.
+    if(!horizontalLock){
+      if(absY >= V_CANCEL && absY > absX){
+        tracking = false;
+        pagerEl.classList.remove("dragging");
+        return; // allow native vertical scroll
+      }
+
+      // ✅ Only lock when it's VERY clearly horizontal
+      if(absX >= H_START && absX > absY * 1.6){
+        horizontalLock = true;
+      }else{
+        return; // still undecided: do nothing, let native scroll happen
+      }
+    }
+
+    // If we got here, we're swiping pages horizontally
+    if(e && e.cancelable) e.preventDefault();
+    pagerEl.scrollLeft = startScroll - dx;
+  };
+
+  const onEnd = (clientX)=>{
+    if(!tracking) return;
+
+    const dx = clientX - startX;
+
+    // If we never locked horizontally, just stop tracking and leave scroll alone.
+    if(!horizontalLock){
+      tracking = false;
+      pagerEl.classList.remove("dragging");
+      return;
+    }
+
+    tracking = false;
+    pagerEl.classList.remove("dragging");
+
+    const threshold = Math.max(44, Math.round(window.innerWidth * 0.14));
+    let target = startIdx;
+
+    if(Math.abs(dx) >= threshold){
+      if(dx < 0) target = startIdx + 1; // left => next
+      else target = startIdx - 1;       // right => prev
+
+      // ✅ wrap ends
+      const last = PAGE_ORDER.length - 1;
+      if(startIdx === last && dx < 0) target = 0;
+      if(startIdx === 0 && dx > 0) target = last;
+    }else{
+      target = getCurrentIdx(pagerEl);
+    }
+
+    // ✅ hard limit: only ±1 page from where you started (except wrap)
+    const last = PAGE_ORDER.length - 1;
+    const wrappedToStart = (startIdx === last && target === 0);
+    const wrappedToEnd   = (startIdx === 0 && target === last);
+
+    if(!wrappedToStart && !wrappedToEnd){
+      if(target > startIdx + 1) target = startIdx + 1;
+      if(target < startIdx - 1) target = startIdx - 1;
+      target = Math.max(0, Math.min(last, target));
+    }
+
+    snapToIdx(pagerEl, target, "smooth");
+    setActiveSectionFromIdx(p, target);
+  };
+
+  // touch
+  pagerEl.addEventListener("touchstart", (e)=>{
+    if(shouldIgnoreSwipeStart(e.target)) return;
+    if(!e.touches || !e.touches.length) return;
+    const t = e.touches[0];
+    onStart(t.clientX, t.clientY);
+  }, { passive:true });
+
+  pagerEl.addEventListener("touchmove", (e)=>{
+    if(!e.touches || !e.touches.length) return;
+    const t = e.touches[0];
+    onMove(t.clientX, t.clientY, e);
+  }, { passive:false });
+
+  pagerEl.addEventListener("touchend", (e)=>{
+    const t = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0] : null;
+    onEnd(t ? t.clientX : startX);
+  }, { passive:true });
+
+  // mouse
+  pagerEl.addEventListener("mousedown", (e)=>{
+    if(e.button !== 0) return;
+    if(shouldIgnoreSwipeStart(e.target)) return;
+    onStart(e.clientX, e.clientY);
+  });
+
+  window.addEventListener("mousemove", (e)=>onMove(e.clientX, e.clientY, e));
+  window.addEventListener("mouseup", (e)=>onEnd(e.clientX));
+
+  // sync activeSection after settle
+  let settleTimer = null;
+  pagerEl.addEventListener("scroll", ()=>{
+    if(settleTimer) clearTimeout(settleTimer);
+    settleTimer = setTimeout(()=>{
+      const idx = getCurrentIdx(pagerEl);
+      setActiveSectionFromIdx(p, idx);
+    }, 90);
+  }, { passive:true });
+
+  window.addEventListener("resize", ()=>{
+    const idx = PAGE_ORDER.indexOf(p.activeSection || "full");
+    snapToIdx(pagerEl, Math.max(0, idx), "auto");
+  }, { passive:true });
+}
 
   const onMove = (clientX, clientY, e)=>{
     if(!dragging) return;
