@@ -1,4 +1,4 @@
-/* Beat Sheet Pro - app.js (FULL REPLACE v_DRUMS5_ICONPROJ_INF_PAGES) */
+/* Beat Sheet Pro - app.js (FULL REPLACE v_DRUMS5_ICONPROJ_INF_PAGES_MP3SYNC) */
 (() => {
 "use strict";
 
@@ -21,6 +21,13 @@ const els = {
   exportBtn: need("exportBtn"),
   saveBtn: need("saveBtn"),
   bpm: need("bpm"),
+
+  // ✅ MP3 sync UI
+  mp3Btn: need("mp3Btn"),
+  mp3Input: need("mp3Input"),
+  mp3Name: need("mp3Name"),
+  mp3Offset: need("mp3Offset"),
+  tapSyncBtn: need("tapSyncBtn"),
 
   // drums
   drum1Btn: need("drum1Btn"),
@@ -129,11 +136,22 @@ function clampInt(v,min,max){
   if(Number.isNaN(v)) return min;
   return Math.max(min, Math.min(max, v));
 }
+function clampNum(v,min,max){
+  const n = Number(v);
+  if(Number.isNaN(n)) return min;
+  return Math.max(min, Math.min(max, n));
+}
 function isCollapsed(){
   return document.body.classList.contains("headerCollapsed");
 }
+function getProjectBpm(){
+  const p = getActiveProject();
+  return clampInt(parseInt(els.bpm?.value || p.bpm || 95, 10), 40, 240);
+}
 
-// ---------- headshot eye blink ----------
+/***********************
+✅ headshot eye blink
+***********************/
 let eyePulseTimer = null;
 let metroOn = false;
 let recording = false;
@@ -165,16 +183,17 @@ function stopEyePulse(){
 function startEyePulseFromBpm(){
   stopEyePulse();
   if(!headerIsVisibleForEyes()) return;
-  if(!(metroOn || recording)) return;
+  if(!(metroOn || recording || mp3Playing)) return;
 
-  const p = getActiveProject();
-  const bpm = clampInt(parseInt(els.bpm?.value || p.bpm || 95, 10), 40, 240);
+  const bpm = getProjectBpm();
   const intervalMs = 60000 / bpm;
   eyePulseTimer = setInterval(()=>flashEyes(), intervalMs);
 }
 window.updateBlinkTargets = window.updateBlinkTargets || function(){};
 
-// ---------- header collapse ----------
+/***********************
+✅ header collapse
+***********************/
 function loadHeaderCollapsed(){
   try{ return localStorage.getItem(HEADER_COLLAPSED_KEY) === "1"; }catch{ return false; }
 }
@@ -191,15 +210,10 @@ function setHeaderCollapsed(isCol){
   if(isCol) stopEyePulse();
   else startEyePulseFromBpm();
 
-  // re-render so pager can swap in/out
   renderAll();
 }
-els.headerToggle?.addEventListener("click", ()=>{
-  setHeaderCollapsed(!isCollapsed());
-});
-els.headerToggle2?.addEventListener("click", ()=>{
-  setHeaderCollapsed(!isCollapsed());
-});
+els.headerToggle?.addEventListener("click", ()=>setHeaderCollapsed(!isCollapsed()));
+els.headerToggle2?.addEventListener("click", ()=>setHeaderCollapsed(!isCollapsed()));
 
 // Keep rhyme dock visible above keyboard (Android)
 function updateDockForKeyboard(){
@@ -213,7 +227,9 @@ window.visualViewport?.addEventListener("resize", updateDockForKeyboard);
 window.visualViewport?.addEventListener("scroll", updateDockForKeyboard);
 window.addEventListener("resize", updateDockForKeyboard);
 
-// ---------- rhyme dock hide/show ----------
+/***********************
+✅ rhyme dock hide/show
+***********************/
 function loadDockHidden(){
   try{ return localStorage.getItem(DOCK_HIDDEN_KEY) === "1"; }catch{ return false; }
 }
@@ -232,7 +248,9 @@ els.dockToggle?.addEventListener("click", ()=>{
   setDockHidden(!nowHidden);
 });
 
-// ---------- syllables ----------
+/***********************
+✅ syllables
+***********************/
 function normalizeWord(w){ return (w||"").toLowerCase().replace(/[^a-z']/g,""); }
 const SYLL_DICT = {
   "im":1,"i'm":1,"ive":1,"i've":1,"ill":1,"i'll":1,"id":1,"i'd":1,
@@ -277,7 +295,9 @@ function syllGlowClass(n){
   return "red";
 }
 
-// ---------- beat splitting ----------
+/***********************
+✅ beat splitting
+***********************/
 function splitBySlashes(text){
   const parts = (text||"").split("/").map(s=>s.trim());
   return [parts[0]||"", parts[1]||"", parts[2]||"", parts[3]||""];
@@ -388,7 +408,9 @@ function computeBeats(text){
   return autoSplitSyllablesClean(text);
 }
 
-// ---------- rhymes ----------
+/***********************
+✅ rhymes
+***********************/
 const rhymeCache = (() => {
   try{ return JSON.parse(localStorage.getItem(RHYME_CACHE_KEY) || "{}"); }
   catch{ return {}; }
@@ -498,7 +520,9 @@ document.addEventListener("click", (e)=>{
     .catch(()=>showToast("Copy failed"));
 });
 
-// ---------- projects ----------
+/***********************
+✅ projects
+***********************/
 function blankSections(){
   const sections = {};
   for(const s of SECTION_DEFS){
@@ -519,8 +543,12 @@ function newProject(name=""){
     activeSection: "verse1",
     bpm: 95,
     highlightMode: "all",
-    recordings: [],
+    recordings: [], // ✅ includes takes AND backing track (kind:"backing")
     sections: blankSections(),
+
+    // ✅ mp3 sync state
+    mp3Offset: 0,
+    backingId: null,
   };
 }
 function loadStore(){
@@ -550,6 +578,10 @@ function repairProject(p){
   if(!Array.isArray(p.recordings)) p.recordings = [];
   if(!p.bpm) p.bpm = 95;
   p.highlightMode = "all";
+
+  if(typeof p.mp3Offset !== "number") p.mp3Offset = 0;
+  if(typeof p.backingId !== "string") p.backingId = null;
+
   return p;
 }
 
@@ -586,7 +618,7 @@ function renderProjectPicker(){
 }
 
 /***********************
-✅ METRONOME / RECORDING (UNCHANGED)
+✅ AUDIO ENGINE (metronome + recording bus)
 ***********************/
 let audioCtx = null;
 let metroGain = null;
@@ -597,17 +629,55 @@ let metroBeat16 = 0;
 
 let activeDrum = 1; // 1..4
 
+// ✅ backing (HTMLAudio + WebAudio routing)
+let backingEl = null;
+let backingSource = null;
+let backingGain = null;
+let mp3Playing = false;
+
 function ensureAudio(){
   if(!audioCtx){
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
     metroGain = audioCtx.createGain();
     metroGain.gain.value = 0.9;
+
     recordDest = audioCtx.createMediaStreamDestination();
+
+    // outputs
     metroGain.connect(audioCtx.destination);
     metroGain.connect(recordDest);
+
+    // backing chain created lazily
   }
 }
 
+function ensureBackingNodes(){
+  ensureAudio();
+  if(!backingEl){
+    backingEl = new Audio();
+    backingEl.preload = "auto";
+    backingEl.crossOrigin = "anonymous";
+    backingEl.playsInline = true;
+    backingEl.addEventListener("ended", ()=>stopBacking());
+    backingEl.addEventListener("pause", ()=>{
+      if(mp3Playing) stopBacking();
+    });
+  }
+  if(!backingSource && backingEl){
+    backingSource = audioCtx.createMediaElementSource(backingEl);
+    backingGain = audioCtx.createGain();
+    backingGain.gain.value = 1.0;
+
+    backingSource.connect(backingGain);
+    backingGain.connect(audioCtx.destination);
+    backingGain.connect(recordDest); // ✅ record backing too
+  }
+}
+
+/***********************
+✅ DRUMS
+***********************/
 function playKick(){
   ensureAudio();
   const t = audioCtx.currentTime;
@@ -702,7 +772,7 @@ function playHat(atTime = null){
   noise.stop(t + 0.04);
 }
 
-/* highlight ALWAYS ALL */
+/* highlight ALWAYS ALL (drums + mp3 sync use this) */
 function flashBeats(beatInBar){
   const barEls = document.querySelectorAll(".bar");
   barEls.forEach(barEl=>{
@@ -739,8 +809,7 @@ function startMetronome(){
   updateDrumButtonsUI();
 
   const tick = () => {
-    const p = getActiveProject();
-    const bpm = clampInt(parseInt(els.bpm?.value || p.bpm,10), 40, 240);
+    const bpm = getProjectBpm();
     const intervalMs = 60000 / bpm / 4;
 
     const step16 = metroBeat16 % 16;
@@ -783,7 +852,7 @@ function stopMetronome(){
   metroTimer = null;
   metroOn = false;
   updateDrumButtonsUI();
-  if(!recording) stopEyePulse();
+  if(!(recording || mp3Playing)) stopEyePulse();
 }
 
 function handleDrumPress(which){
@@ -804,7 +873,7 @@ function handleDrumPress(which){
 }
 
 /***********************
-✅ PLAYBACK + RECORDINGS (UNCHANGED)
+✅ PLAYBACK + RECORDINGS
 ***********************/
 let currentPlayback = null;
 let currentPlaybackId = null;
@@ -815,6 +884,7 @@ function stopSmoothPlayback(){
   currentPlayback = null;
   currentPlaybackId = null;
 }
+
 async function dataUrlToBlob(dataUrl){
   const res = await fetch(dataUrl);
   return await res.blob();
@@ -828,11 +898,30 @@ async function getDecodedBufferForRec(rec){
   decodedCache.set(rec.id, buffer);
   return buffer;
 }
+
+function findBackingRec(p){
+  if(!p) return null;
+  if(p.backingId){
+    const byId = p.recordings?.find(r=>r.id===p.backingId && r.kind==="backing");
+    if(byId) return byId;
+  }
+  const newest = (p.recordings || []).find(r=>r.kind==="backing");
+  return newest || null;
+}
+
 async function play(rec){
+  // ✅ if backing, use MP3 player (keeps currentTime tracking)
+  if(rec?.kind === "backing"){
+    await loadBackingFromRec(rec);
+    startBacking();
+    return;
+  }
+
   ensureAudio();
   if(audioCtx.state === "suspended") await audioCtx.resume();
 
   stopSmoothPlayback();
+  stopBacking(); // ✅ don't overlap
   if(metroOn) stopMetronome();
 
   const buffer = await getDecodedBufferForRec(rec);
@@ -852,6 +941,7 @@ async function play(rec){
     }
   };
 }
+
 async function downloadRec(rec){
   try{
     const blob = await dataUrlToBlob(rec.dataUrl);
@@ -859,7 +949,11 @@ async function downloadRec(rec){
     const a = document.createElement("a");
     a.href = url;
     const safe = (rec.name || "take").replace(/[^\w\s.-]+/g,"").trim() || "take";
-    a.download = `${safe}.${(rec.mime||"audio/webm").includes("ogg") ? "ogg" : "webm"}`;
+    const ext = (rec.mime||"audio/webm").includes("ogg") ? "ogg"
+      : (rec.mime||"").includes("mpeg") ? "mp3"
+      : (rec.mime||"").includes("wav") ? "wav"
+      : "webm";
+    a.download = `${safe}.${ext}`;
     a.click();
     setTimeout(()=>URL.revokeObjectURL(url), 5000);
   }catch(e){
@@ -868,7 +962,9 @@ async function downloadRec(rec){
   }
 }
 
-// recording
+/***********************
+✅ MIC RECORDING (mic + metronome + backing)
+***********************/
 let recorder = null;
 let recChunks = [];
 let micStream = null;
@@ -903,6 +999,7 @@ function blobToDataURL(blob){
 }
 function takeNameFromInput(){ return (els.recordName?.value || "").trim(); }
 function clearTakeNameInput(){ if(els.recordName) els.recordName.value = ""; }
+
 function updateRecordButtonUI(){
   if(!els.recordBtn) return;
   if(recording){
@@ -913,9 +1010,11 @@ function updateRecordButtonUI(){
     els.recordBtn.classList.remove("recOn");
   }
 }
+
 async function startRecording(){
   await ensureMic();
   ensureAudio();
+  ensureBackingNodes(); // ✅ ensures backing is routable if playing
   if(audioCtx.state === "suspended") await audioCtx.resume();
 
   recChunks = [];
@@ -940,7 +1039,7 @@ async function startRecording(){
     updateRecordButtonUI();
 
     if(metroOn) stopMetronome();
-    if(!metroOn) stopEyePulse();
+    if(!(metroOn || mp3Playing)) stopEyePulse();
 
     const blob = new Blob(recChunks, { type: recorder.mimeType || mimeType || "audio/webm" });
     const dataUrl = await blobToDataURL(blob);
@@ -949,7 +1048,7 @@ async function startRecording(){
     const typed = takeNameFromInput();
     const name = typed || `Take ${new Date().toLocaleString()}`;
 
-    const rec = { id: uid(), name, createdAt: nowISO(), mime: blob.type || "audio/webm", dataUrl };
+    const rec = { id: uid(), name, createdAt: nowISO(), mime: blob.type || "audio/webm", dataUrl, kind:"take" };
     p.recordings.unshift(rec);
     decodedCache.delete(rec.id);
 
@@ -965,135 +1064,197 @@ function stopRecording(){
   if(recorder && recording) recorder.stop();
 }
 
-// rename UI
-let editingRecId = null;
+/***********************
+✅ MP3 BACKING TRACK + BPM SYNC
+***********************/
+let syncRaf = null;
+let lastBeat = -1;
+let lastBar = -1;
+let lastScrollTs = 0;
 
-function renderRecordings(){
+function updateMp3ButtonUI(){
+  if(!els.mp3Btn) return;
+  els.mp3Btn.classList.toggle("playing", !!mp3Playing);
+  els.mp3Btn.textContent = mp3Playing ? "■" : "⬆";
+  els.mp3Btn.title = mp3Playing ? "Stop backing track" : "Upload MP3 backing track";
+  els.mp3Btn.setAttribute("aria-label", mp3Playing ? "Stop backing track" : "Upload MP3");
+}
+
+function setMp3Name(text){
+  if(els.mp3Name) els.mp3Name.textContent = text || "No MP3 loaded";
+}
+
+function getMp3Offset(){
   const p = getActiveProject();
-  if(!els.recordingsList) return;
+  const v = els.mp3Offset ? Number(els.mp3Offset.value) : p.mp3Offset;
+  return clampNum(v, 0, 9999);
+}
 
-  els.recordingsList.innerHTML = "";
+function setMp3Offset(v){
+  const p = getActiveProject();
+  const val = Math.max(0, Number(v) || 0);
+  p.mp3Offset = val;
+  if(els.mp3Offset) els.mp3Offset.value = String(val);
+  touchProject(p);
+}
 
-  if(!p.recordings?.length){
-    els.recordingsList.innerHTML = `<div class="small">No recordings yet.</div>`;
+async function loadBackingFromRec(rec){
+  ensureBackingNodes();
+  if(audioCtx.state === "suspended") await audioCtx.resume();
+
+  // set src (dataURL) and name
+  backingEl.src = rec.dataUrl || "";
+  setMp3Name(rec.name || "Backing track");
+  currentPlaybackId = rec.id; // optional visual consistency
+}
+
+function stopBacking(){
+  mp3Playing = false;
+  if(syncRaf) cancelAnimationFrame(syncRaf);
+  syncRaf = null;
+  lastBeat = -1;
+  lastBar = -1;
+
+  try{
+    if(backingEl){
+      backingEl.pause();
+      // keep currentTime where it stopped (user may tap again)
+    }
+  }catch{}
+
+  updateMp3ButtonUI();
+  renderRecordings();
+  if(!(metroOn || recording)) stopEyePulse();
+}
+
+function startBacking(){
+  const p = getActiveProject();
+  const rec = findBackingRec(p);
+  if(!rec){
+    showToast("No MP3 loaded");
     return;
   }
 
-  for(const rec of p.recordings){
-    const row = document.createElement("div");
-    row.className = "audioItem";
+  ensureBackingNodes();
 
-    if(editingRecId === rec.id){
-      const input = document.createElement("input");
-      input.type = "text";
-      input.value = rec.name || "";
-      input.style.fontWeight = "1000";
-      input.style.flex = "1";
-      input.style.minWidth = "180px";
-      input.style.padding = "10px 12px";
-      input.style.borderRadius = "14px";
-      input.style.border = "1px solid rgba(0,0,0,.12)";
-      input.style.boxShadow = "0 6px 14px rgba(0,0,0,.05)";
+  // stop other playback modes
+  stopSmoothPlayback();
+  if(metroOn) stopMetronome();
 
-      const save = document.createElement("button");
-      save.textContent = "Save";
-      save.addEventListener("click", ()=>{
-        const newName = (input.value || "").trim();
-        rec.name = newName || rec.name || "Take";
-        touchProject(p);
-        editingRecId = null;
-        renderRecordings();
-        showToast("Renamed");
-      });
+  const startAt = Math.max(0, backingEl.currentTime || 0);
 
-      const cancel = document.createElement("button");
-      cancel.textContent = "Cancel";
-      cancel.addEventListener("click", ()=>{
-        editingRecId = null;
-        renderRecordings();
-      });
+  mp3Playing = true;
+  updateMp3ButtonUI();
+  startEyePulseFromBpm();
 
-      input.addEventListener("keydown", (e)=>{
-        if(e.key === "Enter"){ e.preventDefault(); save.click(); }
-        if(e.key === "Escape"){ e.preventDefault(); cancel.click(); }
-      });
+  backingEl.play().catch((e)=>{
+    console.error(e);
+    mp3Playing = false;
+    updateMp3ButtonUI();
+    showToast("Play blocked (tap again)");
+  });
 
-      row.appendChild(input);
-      row.appendChild(save);
-      row.appendChild(cancel);
-      els.recordingsList.appendChild(row);
-      continue;
+  // start sync loop
+  const loop = () => {
+    if(!mp3Playing || !backingEl) return;
+
+    const bpm = getProjectBpm();
+    const offset = getMp3Offset();
+
+    const t = Math.max(0, (backingEl.currentTime || 0) - offset);
+    const beatPos = (t * bpm) / 60;          // beats since beat 1
+    const beatInBar = Math.floor(beatPos) % 4;
+    const barIdx = Math.floor(beatPos / 4);  // 0-based bar index
+
+    if(beatInBar !== lastBeat){
+      lastBeat = beatInBar;
+      flashBeats(beatInBar);
     }
 
-    const label = document.createElement("div");
-    label.className = "audioLabel";
-    label.textContent = rec.name || "Take";
+    if(barIdx !== lastBar){
+      lastBar = barIdx;
+      maybeAutoScrollToBar(barIdx);
+    }
 
-    const icons = document.createElement("div");
-    icons.className = "iconRow";
+    syncRaf = requestAnimationFrame(loop);
+  };
+  syncRaf = requestAnimationFrame(loop);
 
-    const editBtn = document.createElement("button");
-    editBtn.className = "iconBtn";
-    editBtn.title = "Edit name";
-    editBtn.textContent = "i";
-    editBtn.addEventListener("click", ()=>{
-      editingRecId = rec.id;
-      renderRecordings();
-      requestAnimationFrame(()=>{
-        const inp = els.recordingsList.querySelector('input[type="text"]');
-        inp?.focus?.();
-        inp?.select?.();
-      });
-    });
+  renderRecordings();
+}
 
-    const playBtn = document.createElement("button");
-    playBtn.className = "iconBtn play";
-    playBtn.title = "Play";
-    playBtn.textContent = (currentPlaybackId === rec.id) ? "…" : "▶";
-    playBtn.addEventListener("click", async ()=>{
-      try{ await play(rec); renderRecordings(); }
-      catch(e){ console.error(e); showToast("Playback failed"); }
-    });
+function maybeAutoScrollToBar(barIdx){
+  // throttle scroll so it feels smooth and not “jittery”
+  const now = Date.now();
+  if(now - lastScrollTs < 200) return;
+  lastScrollTs = now;
 
-    const stopBtn = document.createElement("button");
-    stopBtn.className = "iconBtn stop";
-    stopBtn.title = "Stop";
-    stopBtn.textContent = "■";
-    stopBtn.addEventListener("click", ()=>{
-      stopSmoothPlayback();
-      renderRecordings();
-    });
+  const bars = getVisibleBarsList();
+  if(!bars || !bars.length) return;
+  if(barIdx < 0 || barIdx >= bars.length) return;
 
-    const dlBtn = document.createElement("button");
-    dlBtn.className = "iconBtn";
-    dlBtn.title = "Download";
-    dlBtn.textContent = "⬇";
-    dlBtn.addEventListener("click", ()=>downloadRec(rec));
+  const el = bars[barIdx];
+  if(!el) return;
 
-    const delBtn = document.createElement("button");
-    delBtn.className = "iconBtn delete";
-    delBtn.title = "Delete";
-    delBtn.textContent = "×";
-    delBtn.addEventListener("click", ()=>{
-      if(currentPlaybackId === rec.id) stopSmoothPlayback();
-      if(editingRecId === rec.id) editingRecId = null;
-      decodedCache.delete(rec.id);
-      p.recordings = p.recordings.filter(r=>r.id !== rec.id);
-      touchProject(p);
-      renderRecordings();
-      showToast("Deleted");
-    });
+  // ✅ keep the active bar centered like a teleprompter
+  el.scrollIntoView({ block:"center", behavior:"smooth" });
+}
 
-    icons.appendChild(editBtn);
-    icons.appendChild(playBtn);
-    icons.appendChild(stopBtn);
-    icons.appendChild(dlBtn);
-    icons.appendChild(delBtn);
-
-    row.appendChild(label);
-    row.appendChild(icons);
-    els.recordingsList.appendChild(row);
+function getVisibleBarsList(){
+  // normal mode: just all bars on screen
+  if(!isCollapsed()){
+    return Array.from(document.querySelectorAll(".bar"));
   }
+
+  // collapsed pager mode: choose the page under the center of the screen
+  const hit = document.elementFromPoint(window.innerWidth/2, Math.floor(window.innerHeight*0.62));
+  const page = hit?.closest?.(".page");
+  if(page){
+    return Array.from(page.querySelectorAll(".bar"));
+  }
+
+  // fallback: middle group first page
+  const fallback = document.querySelector(".pageGroup:nth-child(2) .page");
+  return fallback ? Array.from(fallback.querySelectorAll(".bar")) : [];
+}
+
+async function handleMp3File(file){
+  if(!file) return;
+
+  const p = getActiveProject();
+
+  const dataUrl = await new Promise((resolve, reject)=>{
+    const r = new FileReader();
+    r.onload = ()=>resolve(String(r.result || ""));
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+
+  // remove older backing entries (keep storage clean)
+  p.recordings = (p.recordings || []).filter(r => r.kind !== "backing");
+
+  const rec = {
+    id: uid(),
+    name: file.name || `Backing ${new Date().toLocaleString()}`,
+    createdAt: nowISO(),
+    mime: file.type || "audio/mpeg",
+    dataUrl,
+    kind: "backing"
+  };
+
+  p.recordings.unshift(rec);
+  p.backingId = rec.id;
+
+  // auto-load into player
+  await loadBackingFromRec(rec);
+
+  // restore project offset into UI
+  if(els.mp3Offset) els.mp3Offset.value = String(p.mp3Offset || 0);
+
+  touchProject(p);
+  renderRecordings();
+  updateMp3ButtonUI();
+  showToast("MP3 loaded");
 }
 
 /***********************
@@ -1182,14 +1343,13 @@ document.addEventListener("selectionchange", ()=>{
 
 /***********************
 ✅ INFINITE HORIZONTAL PAGES (cards pager) — hide mode only
-✅ FIXED: no duplicate listeners, snap is deterministic, resize handler doesn't stack
 ***********************/
 let pagesScrollHandler = null;
 let pagesSnapHandler = null;
 let pagesResizeHandler = null;
 
-let pagesCopyWidth = 0;   // width of ONE full copy (one .pageGroup)
-let pageViewportW = 0;    // width of ONE page inside a copy
+let pagesCopyWidth = 0;
+let pageViewportW = 0;
 let snapTimer = null;
 
 function teardownInfinitePages(pagerEl){
@@ -1215,7 +1375,6 @@ function teardownInfinitePages(pagerEl){
 }
 
 function measurePager(pagerEl){
-  // ✅ measure the REAL width of one full copy (the middle group)
   const groups = pagerEl.querySelectorAll(".pageGroup");
   const mid = groups[1] || groups[0];
   if(mid){
@@ -1223,8 +1382,6 @@ function measurePager(pagerEl){
     pageViewportW = Math.round(pagesCopyWidth / PAGE_ORDER.length);
     return;
   }
-
-  // fallback
   const w = Math.round(pagerEl.clientWidth || pagerEl.getBoundingClientRect().width || 0);
   pageViewportW = Math.max(0, w);
   pagesCopyWidth = pageViewportW * PAGE_ORDER.length;
@@ -1233,7 +1390,6 @@ function measurePager(pagerEl){
 function setupInfinitePages(pagerEl){
   if(!pagerEl) return;
 
-  // only active in hide/collapsed mode
   if(!isCollapsed()){
     teardownInfinitePages(pagerEl);
     return;
@@ -1246,25 +1402,18 @@ function setupInfinitePages(pagerEl){
     const groups = pagerEl.querySelectorAll(".pageGroup");
     const midStart = (groups[1]?.offsetLeft) || pagesCopyWidth;
 
-    // start at the middle copy
     pagerEl.scrollLeft = midStart;
 
-    // ✅ keep scroll position near the middle copy (true infinite feel)
     pagesScrollHandler = ()=>{
       if(!pagesCopyWidth) return;
-
-      // (re-read midStart in case layout shifts)
       const gs = pagerEl.querySelectorAll(".pageGroup");
       const midS = (gs[1]?.offsetLeft) || pagesCopyWidth;
-
       const x = pagerEl.scrollLeft;
 
-      // If user drifts into left third -> jump forward one full copy
       if(x < midS - (pagesCopyWidth * 0.5)){
         pagerEl.scrollLeft = x + pagesCopyWidth;
         return;
       }
-      // If user drifts into right third -> jump backward one full copy
       if(x > midS + (pagesCopyWidth * 0.5)){
         pagerEl.scrollLeft = x - pagesCopyWidth;
         return;
@@ -1272,10 +1421,8 @@ function setupInfinitePages(pagerEl){
     };
     pagerEl.addEventListener("scroll", pagesScrollHandler, { passive:true });
 
-    // ✅ snap after swipe ends (always snaps inside middle copy)
     pagesSnapHandler = ()=>{
       if(!pagesCopyWidth || !pageViewportW) return;
-
       if(snapTimer) clearTimeout(snapTimer);
       snapTimer = setTimeout(()=>{
         const gs = pagerEl.querySelectorAll(".pageGroup");
@@ -1294,7 +1441,6 @@ function setupInfinitePages(pagerEl){
     };
     pagerEl.addEventListener("scroll", pagesSnapHandler, { passive:true });
 
-    // ✅ one resize listener (does NOT stack on rerenders)
     pagesResizeHandler = ()=>{
       if(!isCollapsed()) return;
       if(!pagerEl.isConnected) return;
@@ -1306,14 +1452,12 @@ function setupInfinitePages(pagerEl){
       const gs = pagerEl.querySelectorAll(".pageGroup");
       const oldMid = (gs[1]?.offsetLeft) || oldCopy;
 
-      // what page were we closest to (based on old sizes)?
       const x = pagerEl.scrollLeft;
       const rel = ((x - oldMid) % oldCopy + oldCopy) % oldCopy;
       let idx = Math.round(rel / oldPage);
       if(idx < 0) idx = 0;
       if(idx > PAGE_ORDER.length - 1) idx = PAGE_ORDER.length - 1;
 
-      // re-measure new sizes
       measurePager(pagerEl);
       if(!pagesCopyWidth || !pageViewportW) return;
 
@@ -1334,7 +1478,6 @@ function scrollPagerToSection(pagerEl, key){
   const idx = PAGE_ORDER.indexOf(key);
   if(idx < 0) return;
 
-  // middle copy start is pagesCopyWidth (or group[1].offsetLeft)
   const groups = pagerEl.querySelectorAll(".pageGroup");
   const midStart = (groups[1]?.offsetLeft) || pagesCopyWidth;
 
@@ -1343,7 +1486,7 @@ function scrollPagerToSection(pagerEl, key){
 }
 
 /***********************
-✅ tabs rendering (keep existing behavior)
+✅ tabs rendering
 ***********************/
 function renderTabs(){
   const p = getActiveProject();
@@ -1355,7 +1498,6 @@ function renderTabs(){
     { key:"full", title:"Full" }
   ];
 
-  // even if hidden by CSS in hide mode, keeping this is fine
   for(const it of items){
     const btn = document.createElement("button");
     btn.type = "button";
@@ -1372,7 +1514,7 @@ function renderTabs(){
 }
 
 /***********************
-✅ bar rendering helper for ANY section (used by pager)
+✅ bar rendering helper for ANY section
 ***********************/
 function renderSectionBarsInto(p, sectionKey, mountEl){
   const sec = p.sections[sectionKey];
@@ -1470,14 +1612,12 @@ function renderSectionBarsInto(p, sectionKey, mountEl){
 }
 
 /***********************
-✅ renderBars: normal mode = single section
-✅ hide mode = infinite horizontal pager of pages (cards)
+✅ renderBars
 ***********************/
 function renderBars(){
   const p = getActiveProject();
   if(!els.bars) return;
 
-  // ✅ HIDE MODE: horizontal pager
   if(isCollapsed()){
     els.bars.innerHTML = "";
 
@@ -1485,7 +1625,6 @@ function renderBars(){
     pager.className = "pager";
     pager.id = "pagesPager";
 
-    // 3 copies for infinite
     for(let g=1; g<=3; g++){
       const group = document.createElement("div");
       group.className = "pageGroup";
@@ -1529,7 +1668,6 @@ function renderBars(){
 
     els.bars.appendChild(pager);
 
-    // fill FULL editor content + wiring (do once)
     const fullTa = els.bars.querySelector(".fullEditor");
     if(fullTa){
       fullTa.value = buildFullTextFromProject(p);
@@ -1550,16 +1688,13 @@ function renderBars(){
       fullTa.addEventListener("focus", refresh);
     }
 
-    // infinite loop setup (clean + deterministic)
     teardownInfinitePages(pager);
     setupInfinitePages(pager);
 
-    // snap to active section after measure
     requestAnimationFrame(()=>{
       scrollPagerToSection(pager, p.activeSection || "verse1");
     });
 
-    // when user swipes, update activeSection based on nearest page
     pager.addEventListener("scroll", ()=>{
       if(!pagesCopyWidth || !pageViewportW) return;
 
@@ -1579,7 +1714,6 @@ function renderBars(){
     return;
   }
 
-  // ✅ NORMAL MODE: existing behavior (one section at a time)
   if(p.activeSection === "full"){
     const fullText = buildFullTextFromProject(p);
     els.bars.innerHTML = `
@@ -1610,7 +1744,6 @@ function renderBars(){
     return;
   }
 
-  const sec = p.sections[p.activeSection];
   els.bars.innerHTML = "";
   const mount = document.createElement("div");
   mount.id = "barsMount";
@@ -1622,11 +1755,168 @@ function renderBars(){
   renderSectionBarsInto(p, p.activeSection, mount);
 }
 
+/***********************
+✅ recordings list (includes backing track)
+***********************/
+let editingRecId = null;
+
+function renderRecordings(){
+  const p = getActiveProject();
+  if(!els.recordingsList) return;
+
+  els.recordingsList.innerHTML = "";
+
+  // update backing panel label
+  const backing = findBackingRec(p);
+  setMp3Name(backing ? (backing.name || "Backing track") : "No MP3 loaded");
+  updateMp3ButtonUI();
+
+  if(els.mp3Offset){
+    const v = (typeof p.mp3Offset === "number") ? p.mp3Offset : 0;
+    els.mp3Offset.value = String(v);
+  }
+
+  if(!p.recordings?.length){
+    els.recordingsList.innerHTML = `<div class="small">No recordings yet.</div>`;
+    return;
+  }
+
+  for(const rec of p.recordings){
+    const row = document.createElement("div");
+    row.className = "audioItem";
+
+    const isBacking = rec.kind === "backing";
+
+    if(editingRecId === rec.id){
+      const input = document.createElement("input");
+      input.type = "text";
+      input.value = rec.name || "";
+      input.style.fontWeight = "1000";
+      input.style.flex = "1";
+      input.style.minWidth = "180px";
+      input.style.padding = "10px 12px";
+      input.style.borderRadius = "14px";
+      input.style.border = "1px solid rgba(0,0,0,.12)";
+      input.style.boxShadow = "0 6px 14px rgba(0,0,0,.05)";
+
+      const save = document.createElement("button");
+      save.textContent = "Save";
+      save.addEventListener("click", ()=>{
+        const newName = (input.value || "").trim();
+        rec.name = newName || rec.name || (isBacking ? "Backing track" : "Take");
+        touchProject(p);
+        editingRecId = null;
+        renderRecordings();
+        showToast("Renamed");
+      });
+
+      const cancel = document.createElement("button");
+      cancel.textContent = "Cancel";
+      cancel.addEventListener("click", ()=>{
+        editingRecId = null;
+        renderRecordings();
+      });
+
+      input.addEventListener("keydown", (e)=>{
+        if(e.key === "Enter"){ e.preventDefault(); save.click(); }
+        if(e.key === "Escape"){ e.preventDefault(); cancel.click(); }
+      });
+
+      row.appendChild(input);
+      row.appendChild(save);
+      row.appendChild(cancel);
+      els.recordingsList.appendChild(row);
+      continue;
+    }
+
+    const label = document.createElement("div");
+    label.className = "audioLabel";
+    label.textContent = isBacking ? `🎵 ${rec.name || "Backing track"}` : (rec.name || "Take");
+
+    const icons = document.createElement("div");
+    icons.className = "iconRow";
+
+    const editBtn = document.createElement("button");
+    editBtn.className = "iconBtn";
+    editBtn.title = "Edit name";
+    editBtn.textContent = "i";
+    editBtn.addEventListener("click", ()=>{
+      editingRecId = rec.id;
+      renderRecordings();
+      requestAnimationFrame(()=>{
+        const inp = els.recordingsList.querySelector('input[type="text"]');
+        inp?.focus?.();
+        inp?.select?.();
+      });
+    });
+
+    const playBtn = document.createElement("button");
+    playBtn.className = "iconBtn play";
+    playBtn.title = "Play";
+    const isThisPlaying = (isBacking && mp3Playing) || (!isBacking && currentPlaybackId === rec.id);
+    playBtn.textContent = isThisPlaying ? "…" : "▶";
+    playBtn.addEventListener("click", async ()=>{
+      try{ await play(rec); renderRecordings(); }
+      catch(e){ console.error(e); showToast("Playback failed"); }
+    });
+
+    const stopBtn = document.createElement("button");
+    stopBtn.className = "iconBtn stop";
+    stopBtn.title = "Stop";
+    stopBtn.textContent = "■";
+    stopBtn.addEventListener("click", ()=>{
+      if(isBacking) stopBacking();
+      else stopSmoothPlayback();
+      renderRecordings();
+    });
+
+    const dlBtn = document.createElement("button");
+    dlBtn.className = "iconBtn";
+    dlBtn.title = "Download";
+    dlBtn.textContent = "⬇";
+    dlBtn.addEventListener("click", ()=>downloadRec(rec));
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "iconBtn delete";
+    delBtn.title = "Delete";
+    delBtn.textContent = "×";
+    delBtn.addEventListener("click", ()=>{
+      if(isBacking){
+        stopBacking();
+        if(p.backingId === rec.id) p.backingId = null;
+      }
+      if(currentPlaybackId === rec.id) stopSmoothPlayback();
+      if(editingRecId === rec.id) editingRecId = null;
+      decodedCache.delete(rec.id);
+      p.recordings = p.recordings.filter(r=>r.id !== rec.id);
+      touchProject(p);
+      renderRecordings();
+      showToast("Deleted");
+    });
+
+    icons.appendChild(editBtn);
+    icons.appendChild(playBtn);
+    icons.appendChild(stopBtn);
+    icons.appendChild(dlBtn);
+    icons.appendChild(delBtn);
+
+    row.appendChild(label);
+    row.appendChild(icons);
+    els.recordingsList.appendChild(row);
+  }
+}
+
+/***********************
+✅ renderAll
+***********************/
 function renderAll(){
   const p = getActiveProject();
   document.body.classList.toggle("fullMode", p.activeSection === "full");
 
   if(els.bpm) els.bpm.value = p.bpm || 95;
+
+  // mp3 state to UI
+  if(els.mp3Offset) els.mp3Offset.value = String(p.mp3Offset || 0);
 
   renderProjectPicker();
   renderTabs();
@@ -1637,8 +1927,9 @@ function renderAll(){
   updateDockForKeyboard();
   updateRecordButtonUI();
   updateDrumButtonsUI();
+  updateMp3ButtonUI();
 
-  if(!(metroOn || recording)) stopEyePulse();
+  if(!(metroOn || recording || mp3Playing)) stopEyePulse();
   else startEyePulseFromBpm();
 }
 
@@ -1724,7 +2015,9 @@ els.exportBtn?.addEventListener("click", ()=>{
   showToast("Exported 2 HTML files");
 });
 
-// ---------- events ----------
+/***********************
+✅ events
+***********************/
 els.newProjectBtn?.addEventListener("click", ()=>{
   const p = newProject("");
   store.projects.unshift(p);
@@ -1767,6 +2060,7 @@ els.projectPicker?.addEventListener("change", ()=>{
   if(store.projects.find(p=>p.id===id)){
     store.activeProjectId = id;
     saveStore();
+    stopBacking(); // avoid carrying playback across projects
     renderAll();
     showToast("Opened");
   }
@@ -1795,10 +2089,8 @@ els.bpm?.addEventListener("change", ()=>{
   p.bpm = clampInt(parseInt(els.bpm.value,10), 40, 240);
   els.bpm.value = p.bpm;
   touchProject(p);
-  if(metroOn){
-    startMetronome();
-  }
-  if(metroOn || recording) startEyePulseFromBpm();
+  if(metroOn) startMetronome();
+  if(metroOn || recording || mp3Playing) startEyePulseFromBpm();
 });
 
 // drum buttons
@@ -1807,6 +2099,7 @@ els.drum2Btn?.addEventListener("click", ()=>handleDrumPress(2));
 els.drum3Btn?.addEventListener("click", ()=>handleDrumPress(3));
 els.drum4Btn?.addEventListener("click", ()=>handleDrumPress(4));
 
+// record button
 els.recordBtn?.addEventListener("click", async ()=>{
   try{
     if(!recording) await startRecording();
@@ -1817,7 +2110,74 @@ els.recordBtn?.addEventListener("click", async ()=>{
   }
 });
 
-// ---------- boot ----------
+/***********************
+✅ MP3 UI EVENTS
+***********************/
+els.mp3Btn?.addEventListener("click", async ()=>{
+  try{
+    const p = getActiveProject();
+    const backing = findBackingRec(p);
+
+    // if playing -> stop
+    if(mp3Playing){
+      stopBacking();
+      showToast("Stop");
+      return;
+    }
+
+    // if no backing -> open picker
+    if(!backing){
+      els.mp3Input?.click?.();
+      return;
+    }
+
+    // else play existing backing
+    await loadBackingFromRec(backing);
+    startBacking();
+    showToast("Play");
+  }catch(e){
+    console.error(e);
+    showToast("MP3 error");
+  }
+});
+
+els.mp3Input?.addEventListener("change", async (e)=>{
+  try{
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-pick same file
+    if(!file) return;
+    stopBacking();
+    await handleMp3File(file);
+  }catch(err){
+    console.error(err);
+    showToast("MP3 load failed");
+  }
+});
+
+els.mp3Offset?.addEventListener("change", ()=>{
+  setMp3Offset(getMp3Offset());
+  showToast("Offset saved");
+});
+
+els.tapSyncBtn?.addEventListener("click", ()=>{
+  try{
+    if(!backingEl || !mp3Playing){
+      showToast("Play MP3 first");
+      return;
+    }
+    // ✅ tap on Beat 1 -> offset becomes currentTime
+    const t = Number(backingEl.currentTime || 0);
+    setMp3Offset(Math.round(t * 100) / 100);
+    showToast("Beat 1 set");
+  }catch(e){
+    console.error(e);
+    showToast("Tap failed");
+  }
+});
+
+/***********************
+✅ boot
+***********************/
 setDockHidden(loadDockHidden());
 document.body.classList.toggle("headerCollapsed", loadHeaderCollapsed());
 renderAll();
