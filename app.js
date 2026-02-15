@@ -1,4 +1,4 @@
-/* Beat Sheet Pro - app.js (FULL REPLACE v_IDB_AUDIO_SIMPLE_PAGER_ONE_PAGE_ONLY_v1) */
+/* Beat Sheet Pro - app.js (FULL REPLACE v_IDB_AUDIO_SIMPLE_PAGER_WRAP_FIX_SCROLL_CENTER_v2) */
 (() => {
 "use strict";
 
@@ -106,7 +106,7 @@ const SECTION_DEFS = [
 
 const FULL_ORDER = ["verse1","chorus1","verse2","chorus2","verse3","bridge","chorus3"];
 
-// ✅ SIMPLE pager order (NO wrap). FULL is first so it's 1 swipe to Verse 1.
+// ✅ pager order
 const PAGE_ORDER = ["full", ...FULL_ORDER];
 
 const FULL_HEADINGS = FULL_ORDER.map(k => (SECTION_DEFS.find(s=>s.key===k)?.title || k).toUpperCase());
@@ -633,10 +633,10 @@ function newProject(name=""){
     name: name || "",
     createdAt: nowISO(),
     updatedAt: nowISO(),
-    activeSection: "full", // ✅ start on FULL now
+    activeSection: "full",
     bpm: 95,
     highlightMode: "all",
-    recordings: [], // ✅ metadata only; audio blobs in IndexedDB
+    recordings: [],
     sections: blankSections(),
   };
 }
@@ -674,9 +674,7 @@ function repairProject(p){
     if(!r.blobId && r.id) r.blobId = r.blobId || r.id;
   });
 
-  // ensure activeSection is valid
   if(!PAGE_ORDER.includes(p.activeSection)) p.activeSection = "full";
-
   return p;
 }
 
@@ -730,7 +728,7 @@ function renderProjectPicker(){
 }
 
 /***********************
-✅ AUDIO ENGINE (metronome + record mix bus)
+✅ AUDIO ENGINE
 ***********************/
 let audioCtx = null;
 let metroGain = null;
@@ -754,11 +752,9 @@ function ensureAudio(){
 
     recordDest = audioCtx.createMediaStreamDestination();
 
-    // user hears
     metroGain.connect(audioCtx.destination);
     playbackGain.connect(audioCtx.destination);
 
-    // recorder hears
     metroGain.connect(recordDest);
     playbackGain.connect(recordDest);
   }
@@ -948,7 +944,7 @@ function handleDrumPress(which){
 }
 
 /***********************
-✅ PLAYBACK (WebAudio buffer) + BPM SYNC HIGHLIGHT
+✅ PLAYBACK
 ***********************/
 const decodedCache = new Map(); // key: blobId/id -> AudioBuffer
 
@@ -970,7 +966,7 @@ const playback = {
   _buf: null,
   _src: null,
   _startTime: 0,
-  _offset: 0, // seconds
+  _offset: 0,
   raf: null,
   lastBeat: -1,
 
@@ -1080,7 +1076,7 @@ const playback = {
 };
 
 /***********************
-✅ RECORDINGS helpers (download uses IDB blob)
+✅ download (IDB)
 ***********************/
 async function downloadRec(rec){
   try{
@@ -1112,7 +1108,7 @@ async function downloadRec(rec){
 }
 
 /***********************
-✅ MIC RECORDING (mic + metronome + MP3) -> saves blob to IDB
+✅ MIC RECORDING
 ***********************/
 let recorder = null;
 let recChunks = [];
@@ -1130,7 +1126,6 @@ async function ensureMic(){
   micGain = audioCtx.createGain();
   micGain.gain.value = 1.0;
 
-  // mic -> record bus ONLY (no feedback to speakers)
   micSource.connect(micGain);
   micGain.connect(recordDest);
 }
@@ -1225,7 +1220,6 @@ async function handleUploadFile(file){
   const mime = file.type || "audio/*";
 
   await idbPutAudio({ id, blob: file, name, mime, createdAt: nowISO() });
-
   decodedCache.delete(id);
 
   const rec = { id, blobId: id, name, createdAt: nowISO(), mime, kind: "track" };
@@ -1310,10 +1304,10 @@ function updateRhymesFromFullCaret(fullTa){
 }
 
 /***********************
-✅ SIMPLE ONE-PAGE PAGER (NO INFINITE LOOP)
-- moves only 1 page per swipe
-- does NOT wrap (prevents Verse1 -> Chorus3 jumps)
-- ignores swipes that start on inputs/textareas/buttons
+✅ SIMPLE PAGER (FIXED)
+- pages sized to container width (not 100vw)
+- swipe only locks when clearly horizontal (prevents vertical freeze)
+- wraps ends: last -> full, full -> last (Chorus 3 loops to FULL)
 ***********************/
 function buildPager(p){
   const pager = document.createElement("div");
@@ -1357,7 +1351,7 @@ function buildPager(p){
 }
 
 function measurePager(pagerEl){
-  const w = Math.round(pagerEl.getBoundingClientRect().width || pagerEl.clientWidth || window.innerWidth);
+  const w = Math.round(pagerEl.clientWidth || pagerEl.getBoundingClientRect().width || window.innerWidth);
   return Math.max(1, w);
 }
 
@@ -1389,7 +1383,7 @@ function shouldIgnoreSwipeStart(target){
 function setupOnePageSwipe(pagerEl, p){
   pagerEl.style.touchAction = "pan-y";
   pagerEl.style.overscrollBehavior = "contain";
-  pagerEl.style.webkitOverflowScrolling = "auto";
+  pagerEl.style.webkitOverflowScrolling = "touch";
   pagerEl.style.scrollBehavior = "auto";
 
   let dragging = false;
@@ -1415,11 +1409,22 @@ function setupOnePageSwipe(pagerEl, p){
     const dx = clientX - startX;
     const dy = clientY - startY;
 
+    // ✅ If user is clearly scrolling vertically, abort swipe entirely.
     if(!horizontalLock){
-      if(Math.abs(dx) > Math.abs(dy) + 6){
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
+
+      // need a real horizontal intent
+      const H_START = 12; // px
+      if(absY > absX + 8){
+        dragging = false;
+        pagerEl.classList.remove("dragging");
+        return; // let page scroll
+      }
+      if(absX > H_START && absX > absY * 1.2){
         horizontalLock = true;
       }else{
-        return; // let vertical scroll happen
+        return; // still undecided, let vertical scroll happen
       }
     }
 
@@ -1428,26 +1433,39 @@ function setupOnePageSwipe(pagerEl, p){
   };
 
   const onEnd = (clientX)=>{
-    if(!dragging) return;
+    if(!dragging && !horizontalLock) return;
     dragging = false;
     pagerEl.classList.remove("dragging");
 
     const dx = clientX - startX;
-    const threshold = Math.max(36, Math.round(window.innerWidth * 0.12)); // ✅ easier swipe
+    const threshold = Math.max(40, Math.round(window.innerWidth * 0.12));
     let target = startIdx;
 
     if(horizontalLock && Math.abs(dx) >= threshold){
-      target = startIdx + (dx < 0 ? 1 : -1);
+      // swipe left => next
+      if(dx < 0) target = startIdx + 1;
+      // swipe right => prev
+      else target = startIdx - 1;
+
+      // ✅ wrap ends (Chorus 3 -> FULL)
+      const last = PAGE_ORDER.length - 1;
+      if(startIdx === last && dx < 0) target = 0;
+      if(startIdx === 0 && dx > 0) target = last;
+
     }else{
-      target = getCurrentIdx(pagerEl); // nearest
+      target = getCurrentIdx(pagerEl);
     }
 
-    // ✅ hard limit: only ±1 page
-    if(target > startIdx + 1) target = startIdx + 1;
-    if(target < startIdx - 1) target = startIdx - 1;
+    // ✅ hard limit: only ±1 page from where you started (except wrap case above)
+    const last = PAGE_ORDER.length - 1;
+    const wrappedToStart = (startIdx === last && target === 0);
+    const wrappedToEnd   = (startIdx === 0 && target === last);
 
-    // ✅ clamp to ends (NO WRAP)
-    target = Math.max(0, Math.min(PAGE_ORDER.length-1, target));
+    if(!wrappedToStart && !wrappedToEnd){
+      if(target > startIdx + 1) target = startIdx + 1;
+      if(target < startIdx - 1) target = startIdx - 1;
+      target = Math.max(0, Math.min(last, target));
+    }
 
     snapToIdx(pagerEl, target, "smooth");
     setActiveSectionFromIdx(p, target);
@@ -1482,7 +1500,7 @@ function setupOnePageSwipe(pagerEl, p){
   window.addEventListener("mousemove", (e)=>onMove(e.clientX, e.clientY, e));
   window.addEventListener("mouseup", (e)=>onEnd(e.clientX));
 
-  // if user scrolls by other means (trackpad), sync activeSection after it settles
+  // sync activeSection after settle
   let settleTimer = null;
   pagerEl.addEventListener("scroll", ()=>{
     if(settleTimer) clearTimeout(settleTimer);
@@ -1597,7 +1615,7 @@ function renderSectionBarsInto(p, sectionKey, mountEl){
 }
 
 /***********************
-✅ renderBars (NOW ALWAYS PAGER)
+✅ renderBars
 ***********************/
 function renderBars(){
   const p = getActiveProject();
@@ -1607,7 +1625,7 @@ function renderBars(){
   const pager = buildPager(p);
   els.bars.appendChild(pager);
 
-  // wire FULL editor
+  // FULL editor
   const fullTa = els.bars.querySelector(".fullEditor");
   if(fullTa){
     fullTa.value = buildFullTextFromProject(p);
@@ -1632,12 +1650,11 @@ function renderBars(){
   const idx = Math.max(0, PAGE_ORDER.indexOf(p.activeSection || "full"));
   snapToIdx(pager, idx, "auto");
 
-  // install swipe
   setupOnePageSwipe(pager, p);
 }
 
 /***********************
-✅ recordings list (uses IDB)
+✅ recordings list
 ***********************/
 let editingRecId = null;
 
@@ -1817,7 +1834,7 @@ function renderAll(){
 }
 
 /***********************
-✅ EXPORT (unchanged)
+✅ EXPORT
 ***********************/
 function safeFileName(name){
   const base = (name || "Beat Sheet Pro Export").trim() || "Beat Sheet Pro Export";
