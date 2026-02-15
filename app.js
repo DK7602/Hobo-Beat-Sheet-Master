@@ -1353,7 +1353,7 @@ function updateRhymesFromFullCaret(fullTa){
 ***********************/
 
 // stored keys (real pages only)
-const PAGE_ORDER = ["full", ...FULL_ORDER];
+
 
 // carousel keys (adds clones at ends)
 const CAROUSEL_ORDER = [
@@ -1446,35 +1446,31 @@ function shouldIgnoreSwipeStart(target){
 }
 
 function setupCarouselPager(pagerEl, p){
-  // allow native horizontal + vertical gestures
-  pagerEl.style.touchAction = "pan-x pan-y pinch-zoom";
+  // We will detect horizontal swipes ourselves (more reliable than scrollLeft-at-edges)
+  pagerEl.style.touchAction = "pan-y pinch-zoom";
   pagerEl.style.overscrollBehaviorX = "contain";
-  pagerEl.style.overscrollBehaviorY = "auto";
   pagerEl.style.webkitOverflowScrolling = "touch";
   pagerEl.style.scrollBehavior = "auto";
 
-  // snap to the correct real page on resize (keeps alignment)
+  // snap to saved REAL page on resize (realIdx+1 because clone is at 0)
   window.addEventListener("resize", ()=>{
     const realIdx = Math.max(0, PAGE_ORDER.indexOf(p.activeSection || "full"));
-    snapToIdx(pagerEl, realIdx + 1, "auto"); // +1 because clone at start
+    snapToIdx(pagerEl, realIdx + 1, "auto");
   });
 
-  // if user lands on a clone, jump to the real page
+  // If user lands on a clone, jump to the matching real page
   let tmr = null;
   pagerEl.addEventListener("scroll", ()=>{
     if(tmr) clearTimeout(tmr);
     tmr = setTimeout(()=>{
       const idx = getCurrentIdx(pagerEl);
 
-      // If at left clone -> jump to last real
       if(idx === 0){
-        const lastRealCarouselIdx = CAROUSEL_ORDER.length - 2; // last real sits here
+        const lastRealCarouselIdx = CAROUSEL_ORDER.length - 2;
         snapToIdx(pagerEl, lastRealCarouselIdx, "auto");
         setActiveSectionFromIdx(p, lastRealCarouselIdx);
         return;
       }
-
-      // If at right clone -> jump to first real
       if(idx === CAROUSEL_ORDER.length - 1){
         const firstRealCarouselIdx = 1;
         snapToIdx(pagerEl, firstRealCarouselIdx, "auto");
@@ -1486,11 +1482,73 @@ function setupCarouselPager(pagerEl, p){
     }, 120);
   }, { passive:true });
 
-  // Optional: prevent accidental swipe-starts on controls
-  pagerEl.addEventListener("pointerdown", (e)=>{
-    if(e.pointerType === "mouse") return;
+  // --- SWIPE DETECTOR (forces wrap even when native scroll won’t move at edges) ---
+  let tracking = false;
+  let locked = false;
+  let startX = 0, startY = 0, lastX = 0;
+  let startIdx = 0;
+
+  const LOCK_X = 18;   // px to lock horizontal
+  const COMMIT = 50;   // px to commit page change
+
+  function finish(){
+    if(!tracking) return;
+    tracking = false;
+
+    const dx = lastX - startX; // + right, - left
+    let idx = startIdx;
+
+    if(locked){
+      if(dx <= -COMMIT) idx = startIdx + 1; // swipe left -> next
+      else if(dx >= COMMIT) idx = startIdx - 1; // swipe right -> prev
+    }
+
+    // wrap inside carousel range
+    idx = Math.max(0, Math.min(CAROUSEL_ORDER.length - 1, idx));
+    snapToIdx(pagerEl, idx, "smooth");
+    setActiveSectionFromIdx(p, idx);
+
+    locked = false;
+  }
+
+  pagerEl.addEventListener("touchstart", (e)=>{
     if(shouldIgnoreSwipeStart(e.target)) return;
+    const t = e.touches[0];
+    if(!t) return;
+    tracking = true;
+    locked = false;
+    startX = lastX = t.clientX;
+    startY = t.clientY;
+    startIdx = getCurrentIdx(pagerEl);
   }, { passive:true });
+
+  pagerEl.addEventListener("touchmove", (e)=>{
+    if(!tracking) return;
+    const t = e.touches[0];
+    if(!t) return;
+
+    const dx = t.clientX - startX;
+    const dy = t.clientY - startY;
+    lastX = t.clientX;
+
+    if(!locked){
+      if(Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)){
+        tracking = false;
+        return;
+      }
+      if(Math.abs(dx) > LOCK_X && Math.abs(dx) > Math.abs(dy) * 1.2){
+        locked = true;
+      }else{
+        return;
+      }
+    }
+
+    // critical: stop browser “edge scroll does nothing” behavior
+    e.preventDefault();
+  }, { passive:false });
+
+  pagerEl.addEventListener("touchend", finish, { passive:true });
+  pagerEl.addEventListener("touchcancel", finish, { passive:true });
 }
 
 
