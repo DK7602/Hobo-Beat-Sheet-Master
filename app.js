@@ -1,4 +1,4 @@
-/* Beat Sheet Pro - app.js (FULL REPLACE v_NO_BACKING_PANEL_UPLOAD_TO_RECORDINGS_SYNC_TO_BPM) */
+/* Beat Sheet Pro - app.js (FULL REPLACE v_IDB_AUDIO_ONE_PAGE_SWIPE) */
 (() => {
 "use strict";
 
@@ -22,7 +22,7 @@ const els = {
   saveBtn: need("saveBtn"),
   bpm: need("bpm"),
 
-  // ✅ upload audio to recordings
+  // upload
   mp3Btn: need("mp3Btn"),
   mp3Input: need("mp3Input"),
 
@@ -139,15 +139,131 @@ function getProjectBpm(){
 }
 
 /***********************
+✅ IndexedDB AUDIO (fixes QuotaExceeded + upload failed)
+- localStorage: metadata only
+- IndexedDB: audio blobs
+***********************/
+const AUDIO_DB_NAME = `${KEY_PREFIX}audio_db_v1`;
+const AUDIO_STORE = "audio";
+
+function openAudioDB(){
+  return new Promise((resolve, reject)=>{
+    const req = indexedDB.open(AUDIO_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if(!db.objectStoreNames.contains(AUDIO_STORE)){
+        db.createObjectStore(AUDIO_STORE, { keyPath:"id" });
+      }
+    };
+    req.onsuccess = ()=>resolve(req.result);
+    req.onerror = ()=>reject(req.error);
+  });
+}
+
+async function idbPutAudio({ id, blob, name, mime, createdAt }){
+  const db = await openAudioDB();
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(AUDIO_STORE, "readwrite");
+    tx.objectStore(AUDIO_STORE).put({
+      id,
+      blob,
+      name: name || "",
+      mime: mime || (blob?.type || ""),
+      createdAt: createdAt || nowISO()
+    });
+    tx.oncomplete = ()=>resolve(true);
+    tx.onerror = ()=>reject(tx.error);
+    tx.onabort = ()=>reject(tx.error);
+  });
+}
+
+async function idbGetAudio(id){
+  const db = await openAudioDB();
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(AUDIO_STORE, "readonly");
+    const req = tx.objectStore(AUDIO_STORE).get(id);
+    req.onsuccess = ()=>resolve(req.result || null);
+    req.onerror = ()=>reject(req.error);
+  });
+}
+
+async function idbDeleteAudio(id){
+  const db = await openAudioDB();
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(AUDIO_STORE, "readwrite");
+    tx.objectStore(AUDIO_STORE).delete(id);
+    tx.oncomplete = ()=>resolve(true);
+    tx.onerror = ()=>reject(tx.error);
+    tx.onabort = ()=>reject(tx.error);
+  });
+}
+
+async function dataUrlToBlob(dataUrl){
+  const res = await fetch(dataUrl);
+  return await res.blob();
+}
+
+// migrate old stored dataUrl -> idb
+async function ensureRecInIdb(rec){
+  if(rec && rec.dataUrl && !rec.blobId){
+    try{
+      const blob = await dataUrlToBlob(rec.dataUrl);
+      const id = rec.id || uid();
+      await idbPutAudio({ id, blob, name: rec.name, mime: rec.mime || blob.type, createdAt: rec.createdAt });
+      rec.blobId = id;
+      rec.mime = rec.mime || blob.type || "audio/*";
+      delete rec.dataUrl; // ✅ critical: shrink localStorage
+      return true;
+    }catch(e){
+      console.error(e);
+      return false;
+    }
+  }
+  return false;
+}
+
+async function getRecBlob(rec){
+  if(!rec) return null;
+
+  // legacy fallback
+  if(rec.dataUrl){
+    try{ return await dataUrlToBlob(rec.dataUrl); }catch{ return null; }
+  }
+
+  const id = rec.blobId || rec.id;
+  if(!id) return null;
+
+  try{
+    const row = await idbGetAudio(id);
+    return row?.blob || null;
+  }catch(e){
+    console.error(e);
+    return null;
+  }
+}
+
+/***********************
+✅ safer save (prevents hard crash)
+***********************/
+function saveStoreSafe(){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+    return true;
+  }catch(e){
+    console.error(e);
+    showToast("Storage full (audio not saved)");
+    return false;
+  }
+}
+
+/***********************
 ✅ headshot eye blink
 ***********************/
 let eyePulseTimer = null;
 let metroOn = false;
 let recording = false;
 
-function headerIsVisibleForEyes(){
-  return !document.body.classList.contains("headerCollapsed");
-}
+function headerIsVisibleForEyes(){ return !document.body.classList.contains("headerCollapsed"); }
 function getEyeEls(){
   const eyeL = document.getElementById("eyeL");
   const eyeR = document.getElementById("eyeR");
@@ -523,7 +639,7 @@ function newProject(name=""){
     activeSection: "verse1",
     bpm: 95,
     highlightMode: "all",
-    recordings: [], // ✅ takes + uploaded mp3s live here
+    recordings: [], // ✅ metadata only; audio blobs in IndexedDB
     sections: blankSections(),
   };
 }
@@ -532,7 +648,7 @@ function loadStore(){
   if(!raw){
     const p = newProject("");
     const s = { activeProjectId: p.id, projects:[p] };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); }catch{}
     return s;
   }
   try{ return JSON.parse(raw); }
@@ -555,10 +671,11 @@ function repairProject(p){
   if(!p.bpm) p.bpm = 95;
   p.highlightMode = "all";
 
-  // ✅ migrate old "backing" items (from older builds) into normal recordings
   p.recordings.forEach(r=>{
     if(r && r.kind === "backing") r.kind = "track";
     if(!r.kind) r.kind = "take";
+    // normalize: keep blobId if present
+    if(!r.blobId && r.id) r.blobId = r.blobId || r.id;
   });
 
   return p;
@@ -574,8 +691,24 @@ if(!store.activeProjectId || !store.projects.find(p=>p.id===store.activeProjectI
   store.activeProjectId = store.projects[0].id;
 }
 
-function saveStore(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(store)); }
-function touchProject(p){ p.updatedAt = nowISO(); saveStore(); }
+function touchProject(p){
+  p.updatedAt = nowISO();
+  saveStoreSafe();
+}
+
+/***********************
+✅ migrate old audio (dataUrl -> idb) so quota errors stop
+***********************/
+async function migrateAllAudioOnce(){
+  let changed = false;
+  for(const p of store.projects){
+    for(const rec of (p.recordings || [])){
+      const did = await ensureRecInIdb(rec);
+      if(did) changed = true;
+    }
+  }
+  if(changed) saveStoreSafe();
+}
 
 /***********************
 ✅ project picker
@@ -612,7 +745,6 @@ let activeDrum = 1;
 function ensureAudio(){
   if(!audioCtx){
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
     metroGain = audioCtx.createGain();
     metroGain.gain.value = 0.9;
 
@@ -749,7 +881,6 @@ function startMetronome(){
   if(audioCtx.state === "suspended") audioCtx.resume();
   stopMetronome();
 
-  // stop playback sync so only one "clock" is driving yellow flash
   playback.stop();
 
   metroOn = true;
@@ -803,7 +934,6 @@ function stopMetronome(){
   updateDrumButtonsUI();
   if(!(recording || playback.isPlaying)) stopEyePulse();
 }
-
 function handleDrumPress(which){
   if(!metroOn){
     activeDrum = which;
@@ -823,6 +953,7 @@ function handleDrumPress(which){
 
 /***********************
 ✅ PLAYBACK (single audio element) + BPM SYNC HIGHLIGHT
+✅ now plays from IndexedDB blob (not localStorage dataUrl)
 ***********************/
 const playback = {
   el: null,
@@ -830,16 +961,15 @@ const playback = {
   isPlaying: false,
   raf: null,
   lastBeat: -1,
+  objUrl: null,
 
   ensure(){
     if(this.el) return;
     this.el = new Audio();
     this.el.preload = "auto";
     this.el.playsInline = true;
-
     this.el.addEventListener("ended", ()=>this.stop(true));
     this.el.addEventListener("pause", ()=>{
-      // if user pauses from native controls (rare)
       if(this.isPlaying) this.stop(true);
     });
   },
@@ -866,17 +996,23 @@ const playback = {
   async playRec(rec){
     this.ensure();
 
-    // stop drums so highlight follows the song
     if(metroOn) stopMetronome();
-
-    // stop any current playback first
     this.stop(false);
 
     this.recId = rec.id;
     this.lastBeat = -1;
 
-    // set src (dataUrl) and play
-    this.el.src = rec.dataUrl || "";
+    const blob = await getRecBlob(rec);
+    if(!blob){
+      showToast("Missing audio");
+      this.recId = null;
+      return;
+    }
+
+    if(this.objUrl) URL.revokeObjectURL(this.objUrl);
+    this.objUrl = URL.createObjectURL(blob);
+
+    this.el.src = this.objUrl;
     this.isPlaying = true;
     startEyePulseFromBpm();
 
@@ -886,6 +1022,7 @@ const playback = {
       console.error(e);
       this.isPlaying = false;
       this.recId = null;
+      if(this.objUrl){ URL.revokeObjectURL(this.objUrl); this.objUrl = null; }
       stopEyePulse();
       showToast("Play blocked (tap again)");
       renderRecordings();
@@ -908,6 +1045,11 @@ const playback = {
       }
     }
 
+    if(this.objUrl){
+      try{ URL.revokeObjectURL(this.objUrl); }catch{}
+      this.objUrl = null;
+    }
+
     this.isPlaying = false;
     this.recId = null;
 
@@ -917,25 +1059,28 @@ const playback = {
 };
 
 /***********************
-✅ RECORDINGS STORAGE HELPERS
+✅ RECORDINGS helpers (download uses IDB blob)
 ***********************/
-async function dataUrlToBlob(dataUrl){
-  const res = await fetch(dataUrl);
-  return await res.blob();
-}
 async function downloadRec(rec){
   try{
-    const blob = await dataUrlToBlob(rec.dataUrl);
+    const blob = await getRecBlob(rec);
+    if(!blob){ showToast("Missing audio"); return; }
+
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
+
     const safe = (rec.name || "take").replace(/[^\w\s.-]+/g,"").trim() || "take";
+    const type = (rec.mime || blob.type || "").toLowerCase();
+
     const ext =
-      (rec.mime||"").includes("mpeg") ? "mp3" :
-      (rec.mime||"").includes("wav") ? "wav" :
-      (rec.mime||"").includes("ogg") ? "ogg" :
-      (rec.mime||"").includes("mp4") ? "m4a" :
-      "webm";
+      type.includes("mpeg") ? "mp3" :
+      type.includes("wav")  ? "wav" :
+      type.includes("ogg")  ? "ogg" :
+      type.includes("mp4")  ? "m4a" :
+      type.includes("webm") ? "webm" :
+      "audio";
+
     a.download = `${safe}.${ext}`;
     a.click();
     setTimeout(()=>URL.revokeObjectURL(url), 5000);
@@ -946,7 +1091,7 @@ async function downloadRec(rec){
 }
 
 /***********************
-✅ MIC RECORDING (mic + metronome)
+✅ MIC RECORDING (mic + metronome) -> saves blob to IDB
 ***********************/
 let recorder = null;
 let recChunks = [];
@@ -973,13 +1118,6 @@ function pickBestMime(){
   }
   return "";
 }
-function blobToDataURL(blob){
-  return new Promise((resolve)=>{
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result || ""));
-    r.readAsDataURL(blob);
-  });
-}
 function takeNameFromInput(){ return (els.recordName?.value || "").trim(); }
 function clearTakeNameInput(){ if(els.recordName) els.recordName.value = ""; }
 
@@ -999,7 +1137,6 @@ async function startRecording(){
   ensureAudio();
   if(audioCtx.state === "suspended") await audioCtx.resume();
 
-  // stop playback so the record is clean
   playback.stop(false);
 
   recChunks = [];
@@ -1025,13 +1162,21 @@ async function startRecording(){
     if(!(metroOn || playback.isPlaying)) stopEyePulse();
 
     const blob = new Blob(recChunks, { type: recorder.mimeType || mimeType || "audio/webm" });
-    const dataUrl = await blobToDataURL(blob);
-
     const p = getActiveProject();
+
     const typed = takeNameFromInput();
     const name = typed || `Take ${new Date().toLocaleString()}`;
 
-    const rec = { id: uid(), name, createdAt: nowISO(), mime: blob.type || "audio/webm", dataUrl, kind:"take" };
+    const id = uid();
+    try{
+      await idbPutAudio({ id, blob, name, mime: blob.type, createdAt: nowISO() });
+    }catch(e){
+      console.error(e);
+      showToast("Audio save failed");
+      return;
+    }
+
+    const rec = { id, blobId: id, name, createdAt: nowISO(), mime: blob.type || "audio/webm", kind:"take" };
     p.recordings.unshift(rec);
 
     clearTakeNameInput();
@@ -1047,25 +1192,24 @@ function stopRecording(){
 }
 
 /***********************
-✅ Upload audio -> goes into recordings (same as Song Rider Pro behavior)
+✅ Upload audio -> saves blob to IDB (fixes Upload failed)
 ***********************/
 async function handleUploadFile(file){
   if(!file) return;
   const p = getActiveProject();
 
-  const dataUrl = await new Promise((resolve, reject)=>{
-    const r = new FileReader();
-    r.onload = ()=>resolve(String(r.result || ""));
-    r.onerror = reject;
-    r.readAsDataURL(file);
-  });
+  const id = uid();
+  const name = file.name || `Audio ${new Date().toLocaleString()}`;
+  const mime = file.type || "audio/*";
+
+  await idbPutAudio({ id, blob: file, name, mime, createdAt: nowISO() });
 
   const rec = {
-    id: uid(),
-    name: file.name || `Audio ${new Date().toLocaleString()}`,
+    id,
+    blobId: id,
+    name,
     createdAt: nowISO(),
-    mime: file.type || "audio/*",
-    dataUrl,
+    mime,
     kind: "track"
   };
 
@@ -1129,7 +1273,6 @@ function applyFullTextToProject(p, fullText){
 
   touchProject(p);
 }
-
 function updateRhymesFromFullCaret(fullTa){
   if(!fullTa) return;
   const text = fullTa.value || "";
@@ -1160,37 +1303,13 @@ document.addEventListener("selectionchange", ()=>{
 }, { passive:true });
 
 /***********************
-✅ INFINITE HORIZONTAL PAGES (hide mode only)
+✅ ONE-PAGE SWIPE (collapsed horizontal pager)
+- Enforces: each swipe moves max 1 page
 ***********************/
-let pagesScrollHandler = null;
-let pagesSnapHandler = null;
-let pagesResizeHandler = null;
-
 let pagesCopyWidth = 0;
 let pageViewportW = 0;
 let snapTimer = null;
 
-function teardownInfinitePages(pagerEl){
-  if(!pagerEl) return;
-
-  if(pagesScrollHandler){
-    pagerEl.removeEventListener("scroll", pagesScrollHandler);
-    pagesScrollHandler = null;
-  }
-  if(pagesSnapHandler){
-    pagerEl.removeEventListener("scroll", pagesSnapHandler);
-    pagesSnapHandler = null;
-  }
-  if(pagesResizeHandler){
-    window.removeEventListener("resize", pagesResizeHandler);
-    pagesResizeHandler = null;
-  }
-
-  if(snapTimer){ clearTimeout(snapTimer); snapTimer = null; }
-
-  pagesCopyWidth = 0;
-  pageViewportW = 0;
-}
 function measurePager(pagerEl){
   const groups = pagerEl.querySelectorAll(".pageGroup");
   const mid = groups[1] || groups[0];
@@ -1203,26 +1322,88 @@ function measurePager(pagerEl){
   pageViewportW = Math.max(0, w);
   pagesCopyWidth = pageViewportW * PAGE_ORDER.length;
 }
-function setupInfinitePages(pagerEl){
-  if(!pagerEl) return;
+function getMidStart(pagerEl){
+  const groups = pagerEl.querySelectorAll(".pageGroup");
+  return (groups[1]?.offsetLeft) || pagesCopyWidth;
+}
+function getCurrentIdx(pagerEl){
+  if(!pagesCopyWidth || !pageViewportW) measurePager(pagerEl);
+  const midStart = getMidStart(pagerEl);
+  const x = pagerEl.scrollLeft;
+  const rel = ((x - midStart) % pagesCopyWidth + pagesCopyWidth) % pagesCopyWidth;
+  let idx = Math.round(rel / pageViewportW);
+  idx = Math.max(0, Math.min(PAGE_ORDER.length-1, idx));
+  return idx;
+}
+function snapToIdx(pagerEl, idx, behavior="auto"){
+  if(!pagesCopyWidth || !pageViewportW) measurePager(pagerEl);
+  const midStart = getMidStart(pagerEl);
+  idx = Math.max(0, Math.min(PAGE_ORDER.length-1, idx));
+  const left = Math.round(midStart + idx * pageViewportW);
+  pagerEl.scrollTo({ left, behavior });
+}
 
-  if(!isCollapsed()){
-    teardownInfinitePages(pagerEl);
-    return;
-  }
+function setupOnePageSwipe(pagerEl){
+  let touchActive = false;
+  let startX = 0;
+  let startIdx = 0;
 
+  pagerEl.addEventListener("touchstart", (e)=>{
+    if(!e.touches || !e.touches.length) return;
+    touchActive = true;
+    startX = e.touches[0].clientX;
+    startIdx = getCurrentIdx(pagerEl);
+  }, { passive:true });
+
+  pagerEl.addEventListener("touchend", (e)=>{
+    if(!touchActive) return;
+    touchActive = false;
+
+    const endX = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0].clientX : startX;
+    const dx = endX - startX;
+
+    const threshold = Math.max(40, Math.round(window.innerWidth * 0.12));
+    let target = startIdx;
+
+    if(Math.abs(dx) >= threshold){
+      // swipe left -> next page, swipe right -> prev page
+      target = startIdx + (dx < 0 ? 1 : -1);
+    }else{
+      // small move -> snap to nearest
+      target = getCurrentIdx(pagerEl);
+    }
+
+    // ✅ enforce max 1 page step
+    if(target > startIdx + 1) target = startIdx + 1;
+    if(target < startIdx - 1) target = startIdx - 1;
+
+    snapToIdx(pagerEl, target, "smooth");
+  }, { passive:true });
+
+  // debounce snap after scroll (keeps it tight)
+  pagerEl.addEventListener("scroll", ()=>{
+    if(!pagesCopyWidth || !pageViewportW) return;
+    if(snapTimer) clearTimeout(snapTimer);
+    snapTimer = setTimeout(()=>{
+      const idx = getCurrentIdx(pagerEl);
+      snapToIdx(pagerEl, idx, "auto");
+    }, 90);
+  }, { passive:true });
+}
+
+/***********************
+✅ INFINITE PAGES (3 groups) + one-page swipe snap
+***********************/
+function setupInfinitePager(pagerEl){
   requestAnimationFrame(()=>{
     measurePager(pagerEl);
     if(!pagesCopyWidth || !pageViewportW) return;
 
-    const groups = pagerEl.querySelectorAll(".pageGroup");
-    const midStart = (groups[1]?.offsetLeft) || pagesCopyWidth;
+    const midStart = getMidStart(pagerEl);
     pagerEl.scrollLeft = midStart;
 
-    pagesScrollHandler = ()=>{
-      if(!pagesCopyWidth) return;
-      const gs = pagerEl.querySelectorAll(".pageGroup");
-      const midS = (gs[1]?.offsetLeft) || pagesCopyWidth;
+    pagerEl.addEventListener("scroll", ()=>{
+      const midS = getMidStart(pagerEl);
       const x = pagerEl.scrollLeft;
 
       if(x < midS - (pagesCopyWidth * 0.5)){
@@ -1233,70 +1414,17 @@ function setupInfinitePages(pagerEl){
         pagerEl.scrollLeft = x - pagesCopyWidth;
         return;
       }
-    };
-    pagerEl.addEventListener("scroll", pagesScrollHandler, { passive:true });
+    }, { passive:true });
 
-    pagesSnapHandler = ()=>{
-      if(!pagesCopyWidth || !pageViewportW) return;
-      if(snapTimer) clearTimeout(snapTimer);
-      snapTimer = setTimeout(()=>{
-        const gs = pagerEl.querySelectorAll(".pageGroup");
-        const midS = (gs[1]?.offsetLeft) || pagesCopyWidth;
-
-        const x = pagerEl.scrollLeft;
-        const rel = ((x - midS) % pagesCopyWidth + pagesCopyWidth) % pagesCopyWidth;
-
-        let idx = Math.round(rel / pageViewportW);
-        if(idx < 0) idx = 0;
-        if(idx > PAGE_ORDER.length - 1) idx = PAGE_ORDER.length - 1;
-
-        const snapped = Math.round(midS + (idx * pageViewportW));
-        pagerEl.scrollTo({ left: snapped, behavior: "auto" });
-      }, 90);
-    };
-    pagerEl.addEventListener("scroll", pagesSnapHandler, { passive:true });
-
-    pagesResizeHandler = ()=>{
-      if(!isCollapsed()) return;
-      if(!pagerEl.isConnected) return;
-
-      const oldCopy = pagesCopyWidth;
-      const oldPage = pageViewportW;
-      if(!oldCopy || !oldPage) return;
-
-      const gs = pagerEl.querySelectorAll(".pageGroup");
-      const oldMid = (gs[1]?.offsetLeft) || oldCopy;
-
-      const x = pagerEl.scrollLeft;
-      const rel = ((x - oldMid) % oldCopy + oldCopy) % oldCopy;
-      let idx = Math.round(rel / oldPage);
-      if(idx < 0) idx = 0;
-      if(idx > PAGE_ORDER.length - 1) idx = PAGE_ORDER.length - 1;
-
-      measurePager(pagerEl);
-      if(!pagesCopyWidth || !pageViewportW) return;
-
-      const gs2 = pagerEl.querySelectorAll(".pageGroup");
-      const newMid = (gs2[1]?.offsetLeft) || pagesCopyWidth;
-
-      pagerEl.scrollLeft = newMid + (idx * pageViewportW);
-    };
-    window.addEventListener("resize", pagesResizeHandler, { passive:true });
+    setupOnePageSwipe(pagerEl);
   });
 }
-function scrollPagerToSection(pagerEl, key){
-  if(!pagerEl) return;
-  if(!pagesCopyWidth || !pageViewportW) measurePager(pagerEl);
-  if(!pagesCopyWidth || !pageViewportW) return;
 
+function scrollPagerToSection(pagerEl, key){
+  if(!pagesCopyWidth || !pageViewportW) measurePager(pagerEl);
   const idx = PAGE_ORDER.indexOf(key);
   if(idx < 0) return;
-
-  const groups = pagerEl.querySelectorAll(".pageGroup");
-  const midStart = (groups[1]?.offsetLeft) || pagesCopyWidth;
-
-  const target = midStart + (idx * pageViewportW);
-  pagerEl.scrollTo({ left: target, behavior: "smooth" });
+  snapToIdx(pagerEl, idx, "auto");
 }
 
 /***********************
@@ -1502,21 +1630,13 @@ function renderBars(){
       fullTa.addEventListener("focus", refresh);
     }
 
-    teardownInfinitePages(pager);
-    setupInfinitePages(pager);
-
+    setupInfinitePager(pager);
     requestAnimationFrame(()=>scrollPagerToSection(pager, p.activeSection || "verse1"));
 
     pager.addEventListener("scroll", ()=>{
       if(!pagesCopyWidth || !pageViewportW) return;
-
-      const groups = pager.querySelectorAll(".pageGroup");
-      const midStart = (groups[1]?.offsetLeft) || pagesCopyWidth;
-
-      const rel = ((pager.scrollLeft - midStart) % pagesCopyWidth + pagesCopyWidth) % pagesCopyWidth;
-      const idx = Math.round(rel / pageViewportW);
-      const key = PAGE_ORDER[Math.max(0, Math.min(PAGE_ORDER.length-1, idx))];
-
+      const idx = getCurrentIdx(pager);
+      const key = PAGE_ORDER[idx];
       if(key && key !== p.activeSection){
         p.activeSection = key;
         touchProject(p);
@@ -1568,7 +1688,7 @@ function renderBars(){
 }
 
 /***********************
-✅ recordings list (includes uploaded MP3s)
+✅ recordings list (uses IDB)
 ***********************/
 let editingRecId = null;
 
@@ -1601,10 +1721,17 @@ function renderRecordings(){
 
       const save = document.createElement("button");
       save.textContent = "Save";
-      save.addEventListener("click", ()=>{
+      save.addEventListener("click", async ()=>{
         const newName = (input.value || "").trim();
         rec.name = newName || rec.name || "Take";
         touchProject(p);
+
+        // optional: keep IDB row name in sync (not required, but nice)
+        try{
+          const blob = await getRecBlob(rec);
+          if(blob) await idbPutAudio({ id: rec.blobId || rec.id, blob, name: rec.name, mime: rec.mime, createdAt: rec.createdAt });
+        }catch{}
+
         editingRecId = null;
         renderRecordings();
         showToast("Renamed");
@@ -1687,13 +1814,22 @@ function renderRecordings(){
     delBtn.className = "iconBtn delete";
     delBtn.title = "Delete";
     delBtn.textContent = "×";
-    delBtn.addEventListener("click", ()=>{
-      if(playback.recId === rec.id) playback.stop(true);
-      if(editingRecId === rec.id) editingRecId = null;
-      p.recordings = p.recordings.filter(r=>r.id !== rec.id);
-      touchProject(p);
-      renderRecordings();
-      showToast("Deleted");
+    delBtn.addEventListener("click", async ()=>{
+      try{
+        if(playback.recId === rec.id) playback.stop(true);
+        if(editingRecId === rec.id) editingRecId = null;
+
+        const id = rec.blobId || rec.id;
+        if(id) await idbDeleteAudio(id);
+
+        p.recordings = p.recordings.filter(r=>r.id !== rec.id);
+        touchProject(p);
+        renderRecordings();
+        showToast("Deleted");
+      }catch(e){
+        console.error(e);
+        showToast("Delete failed");
+      }
     });
 
     icons.appendChild(editBtn);
@@ -1820,7 +1956,7 @@ els.newProjectBtn?.addEventListener("click", ()=>{
   const p = newProject("");
   store.projects.unshift(p);
   store.activeProjectId = p.id;
-  saveStore();
+  saveStoreSafe();
   renderAll();
   showToast("New project");
 });
@@ -1834,23 +1970,31 @@ els.copyProjectBtn?.addEventListener("click", ()=>{
   clone.updatedAt = nowISO();
   store.projects.unshift(repairProject(clone));
   store.activeProjectId = clone.id;
-  saveStore();
+  saveStoreSafe();
   renderAll();
   showToast("Copied");
 });
 
-els.deleteProjectBtn?.addEventListener("click", ()=>{
+els.deleteProjectBtn?.addEventListener("click", async ()=>{
   const active = getActiveProject();
   if(store.projects.length <= 1){
     showToast("Can't delete last project");
     return;
   }
-  // stop playback if deleting current project's playing audio
+
   playback.stop(true);
+
+  // delete that project's audio blobs too
+  try{
+    for(const rec of (active.recordings || [])){
+      const id = rec.blobId || rec.id;
+      if(id) await idbDeleteAudio(id);
+    }
+  }catch{}
 
   store.projects = store.projects.filter(p=>p.id !== active.id);
   store.activeProjectId = store.projects[0].id;
-  saveStore();
+  saveStoreSafe();
   renderAll();
   showToast("Deleted");
 });
@@ -1860,7 +2004,7 @@ els.projectPicker?.addEventListener("change", ()=>{
   if(!id) return;
   if(store.projects.find(p=>p.id===id)){
     store.activeProjectId = id;
-    saveStore();
+    saveStoreSafe();
     playback.stop(true);
     renderAll();
     showToast("Opened");
@@ -1912,22 +2056,17 @@ els.recordBtn?.addEventListener("click", async ()=>{
 });
 
 /***********************
-✅ Upload button wiring (FIXED)
+✅ Upload button wiring (fixed, IDB)
 ***********************/
 els.mp3Btn?.addEventListener("click", ()=>{
-  try{
-    // always opens picker
-    els.mp3Input?.click?.();
-  }catch(e){
-    console.error(e);
-    showToast("Upload failed");
-  }
+  try{ els.mp3Input?.click?.(); }
+  catch(e){ console.error(e); showToast("Upload failed"); }
 });
 
 els.mp3Input?.addEventListener("change", async (e)=>{
   try{
     const file = e.target.files?.[0];
-    e.target.value = ""; // allow re-pick same file
+    e.target.value = "";
     if(!file) return;
     await handleUploadFile(file);
   }catch(err){
@@ -1939,8 +2078,14 @@ els.mp3Input?.addEventListener("change", async (e)=>{
 /***********************
 ✅ boot
 ***********************/
-setDockHidden(loadDockHidden());
-document.body.classList.toggle("headerCollapsed", loadHeaderCollapsed());
-renderAll();
-updateRhymes("");
+(async function boot(){
+  setDockHidden(loadDockHidden());
+  document.body.classList.toggle("headerCollapsed", loadHeaderCollapsed());
+
+  // ✅ convert any old stored dataUrls into IndexedDB (stops quota errors)
+  await migrateAllAudioOnce();
+
+  renderAll();
+  updateRhymes("");
+})();
 })();
