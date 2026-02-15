@@ -1421,11 +1421,11 @@ function setActiveSectionFromIdx(p, idx){
 function shouldIgnoreSwipeStart(target){
   if(!target) return false;
 
-  // ✅ allow swiping even if you start on the FULL editor textarea
-  if(target.closest(".fullEditor")) return false;
-
-  return !!target.closest("textarea, input, select, button, .rhymeDock, .iconBtn, .projIconBtn");
+  // ✅ DO allow swiping even if you start on any textarea (FULL or bar textareas)
+  // We only block taps on controls where swipe would be annoying.
+  return !!target.closest("input, select, button, .rhymeDock, .iconBtn, .projIconBtn");
 }
+
 
 
 function setupOnePageSwipe(pagerEl, p){
@@ -1487,20 +1487,22 @@ if(horizontalLock){
     pagerEl.classList.remove("dragging");
   };
 
-  pagerEl.addEventListener("pointerdown", (e)=>{
-    if(e.pointerType === "mouse") return; // mouse can just scroll normally
-    if(shouldIgnoreSwipeStart(e.target)) return;
+ pagerEl.addEventListener("pointerdown", (e)=>{
+  if(e.pointerType === "mouse") return; // mouse can just scroll normally
+  if(shouldIgnoreSwipeStart(e.target)) return;
 
-    tracking = true;
-    horizontalLock = false;
+  tracking = true;
+  horizontalLock = false;
+  lastDx = 0; // ✅ reset each gesture
 
-    startX = e.clientX;
-    startY = e.clientY;
-    startScroll = pagerEl.scrollLeft;
-    startIdx = getCurrentIdx(pagerEl);
+  startX = e.clientX;
+  startY = e.clientY;
+  startScroll = pagerEl.scrollLeft;
+  startIdx = getCurrentIdx(pagerEl);
 
-    pagerEl.classList.add("dragging");
-  });
+  pagerEl.classList.add("dragging");
+});
+
 
   pagerEl.addEventListener("pointermove", (e)=>{
     if(!tracking) return;
