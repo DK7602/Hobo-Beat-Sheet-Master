@@ -1,4 +1,4 @@
-<!-- index.html (FULL REPLACE v_HOBO_BEATSHEET_IDB_SIMPLE_PAGER_CENTER_SCROLL_v2_SPRAYFONT) -->
+<!-- index.html (FULL REPLACE v_HOBO_BEATSHEET_IDB_SIMPLE_PAGER_CENTER_SCROLL_v2_SPRAYFONT_HLLOCK_v1) -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -12,9 +12,7 @@
     /* ✅ real global box sizing */
     *, *::before, *::after{ box-sizing:border-box; }
 
-    /* ✅ YOUR UPLOADED SPRAY PAINT FONT
-       IMPORTANT: put the .otf file in the SAME folder as this index.html on GitHub Pages.
-       If you rename the file (recommended), update the url(...) below to match exactly. */
+    /* ✅ YOUR UPLOADED SPRAY PAINT FONT */
     @font-face{
       font-family: "DeardorfDrip";
       src: url("./Deardorf%20Drip%20Demo.otf") format("opentype");
@@ -37,12 +35,16 @@
       --red:#ff2b2b;
       --yellow:#ffd54a;
       --okgreen:#35d07f;
+
+      /* ✅ highlighters */
+      --hlBlue:#00E5FF;
+      --hlGreen:#39FF14;
     }
 
     html, body{ height:100%; }
     body{
       margin:0;
-      overflow:hidden;          /* ✅ stop body scrolling entirely */
+      overflow:hidden;
       background:var(--bg);
       -webkit-text-size-adjust:100%;
     }
@@ -60,7 +62,7 @@
       margin:0;
       scroll-snap-type: x mandatory;
       scroll-behavior: auto;
-      touch-action: pan-x pan-y pinch-zoom; /* ✅ allow horizontal swipe */
+      touch-action: pan-x pan-y pinch-zoom;
     }
     .pager::-webkit-scrollbar{ display:none; }
 
@@ -69,7 +71,7 @@
       width:100%;
       max-width:100%;
       overflow-x:hidden;
-      padding:10px 0 26px;  /* ✅ use main padding instead */
+      padding:10px 0 26px;
       scroll-snap-align: start;
       scroll-snap-stop: always;
     }
@@ -88,14 +90,14 @@
     body.headerCollapsed #bars{ gap:0 !important; }
 
     header{
-      position:fixed;           /* ✅ fixed header */
+      position:fixed;
       top:0; left:0; right:0;
       z-index:20;
       background:var(--bg);
       border-bottom:1px solid rgba(0,0,0,.06);
       padding:8px 10px;
 
-      max-height:28vh;          /* keep your behavior */
+      max-height:28vh;
       overflow:auto;
       -webkit-overflow-scrolling:touch;
     }
@@ -118,22 +120,25 @@
     body.headerCollapsed .stickyTools{ margin-top:0; }
     body.headerCollapsed .headerToggleRow{ display:flex; }
 
+    /* ✅ PROTECT HEADSHOT: NEVER WRAP THIS ROW */
     .titleRow{
       display:flex;
       align-items:flex-end;
       justify-content:space-between;
-      gap:10px;
+      gap:6px;               /* tighter = more room for title */
       margin-bottom:6px;
+
+      flex-wrap:nowrap;      /* ✅ headshot cannot drop */
+      min-width:0;
     }
 
-    /* ✅ SPRAY TITLE: fills the void up to headshot, WITHOUT making header taller */
+    /* ✅ TITLE: fill the air without changing row height or bumping headshot */
     .title{
       flex:1 1 auto;
       min-width:0;
       margin:0;
 
-      /* keep same top-row height as the headshot so it doesn't grow */
-      height:64px;
+      height:64px;                 /* locks top-row height */
       display:flex;
       align-items:flex-end;
 
@@ -143,17 +148,25 @@
       line-height:1;
 
       white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
+      overflow:hidden;             /* ✅ clips before headshot */
+      text-overflow:clip;
 
-      /* scale to fill available width */
-      font-size: clamp(20px, 6.4vw, 36px);
+      /* a bit bigger, then we stretch horizontally */
+      font-size: clamp(22px, 7.2vw, 44px);
 
-      /* a little spray vibe without changing layout */
+      /* ✅ bright highlighter blue + green */
+      color: var(--hlBlue);
       text-shadow:
-        0 2px 0 rgba(0,0,0,.08),
-        0 8px 18px rgba(0,0,0,.10);
-      transform: translateY(2px);
+        2px 1px 0 var(--hlGreen),
+        4px 2px 0 rgba(57,255,20,.85),
+        8px 5px 14px rgba(57,255,20,.28),
+        2px 2px 0 rgba(0,229,255,.95),
+        7px 6px 16px rgba(0,229,255,.22);
+
+      /* ✅ makes it “fill the air” but stays inside its own box */
+      transform-origin:left bottom;
+      transform: translateY(2px) scaleX(1.45);
+      padding-right:10px;          /* ✅ safety buffer so it never “touches” headshot */
     }
 
     .small{
@@ -229,7 +242,9 @@
       align-items:center;
       justify-content:center;
       pointer-events:none;
-      flex:0 0 auto;
+
+      flex:0 0 64px;          /* ✅ cannot shrink, cannot wrap */
+      min-width:64px;
     }
     .bpmHeadshot{
       width:64px;
@@ -240,6 +255,7 @@
       border:0;
       box-shadow:none;
       pointer-events:none;
+      display:block;
     }
     .eyeDot{
       position:absolute;
@@ -320,18 +336,17 @@
     }
 
     main{
-      position:fixed;              /* ✅ main is the viewport below header */
+      position:fixed;
       left:0; right:0; bottom:0;
-      top:var(--headerH, 220px);   /* ✅ JS will set this */
+      top:var(--headerH, 220px);
       overflow:hidden;
       padding:10px 10px 26px;
     }
 
     #bars{
       height:100%;
-      overflow-y:auto;             /* ✅ ONLY vertical scroll lives here */
+      overflow-y:auto;
       -webkit-overflow-scrolling:touch;
-
       display:flex;
       flex-direction:column;
       gap:10px;
@@ -746,7 +761,7 @@
   (function(){
     const repo = (location.pathname.split("/").filter(Boolean)[0] || "");
     const base = repo ? ("/" + repo) : "";
-    const v = "SHARED_20260215_CENTER_SCROLL_WRAP_FIX_v2_SPRAYFONT";
+    const v = "SHARED_20260215_CENTER_SCROLL_WRAP_FIX_v2_SPRAYFONT_HLLOCK_v1";
 
     const man = document.getElementById("appManifest");
     if(man) man.href = base + "/manifest.webmanifest?v=" + encodeURIComponent(v);
