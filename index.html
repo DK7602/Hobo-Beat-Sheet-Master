@@ -29,12 +29,13 @@
     }
 
     html, body{ height:100%; }
-    body{
-      margin:0;              /* ✅ fixes off-center / weird widths */
-      overflow-x:hidden;
-      background:var(--bg);
-      -webkit-text-size-adjust: 100%;
-    }
+   body{
+  margin:0;
+  overflow:hidden;          /* ✅ stop body scrolling entirely */
+  background:var(--bg);
+  -webkit-text-size-adjust:100%;
+}
+
 
     /* ✅ pager: use container width (NOT 100vw) */
     .pager{
@@ -42,7 +43,7 @@
       display:flex;
       flex-wrap:nowrap;
        overflow-x:auto;
-  overflow-y:visible; 
+  overflow-y:hidden; 
       -webkit-overflow-scrolling: touch;
       gap:0;
       padding:0;
@@ -76,17 +77,19 @@
     body.headerCollapsed main{ padding:0 !important; }
     body.headerCollapsed #bars{ gap:0 !important; }
 
-    header{
-      position:sticky;
-      top:0;
-      z-index:20;
-      background:var(--bg);
-      border-bottom:1px solid rgba(0,0,0,.06);
-      padding:8px 10px;
-      max-height:28vh;
-      overflow:auto;
-      -webkit-overflow-scrolling: touch;
-    }
+  header{
+  position:fixed;           /* ✅ fixed header */
+  top:0; left:0; right:0;
+  z-index:20;
+  background:var(--bg);
+  border-bottom:1px solid rgba(0,0,0,.06);
+  padding:8px 10px;
+
+  max-height:28vh;          /* keep your behavior */
+  overflow:auto;
+  -webkit-overflow-scrolling:touch;
+}
+ 
 
     body.fullMode header{ max-height:16vh; }
     body.fullMode .miniCard{ display:none; }
@@ -283,8 +286,24 @@
       border-radius:14px;
     }
 
-    main{ padding:10px 10px 26px; }
-    #bars{ display:flex; flex-direction:column; gap:10px; }
+   main{
+  position:fixed;              /* ✅ main is the viewport below header */
+  left:0; right:0; bottom:0;
+  top:var(--headerH, 220px);   /* ✅ JS will set this */
+  overflow:hidden;
+  padding:10px 10px 26px;
+}
+
+#bars{
+  height:100%;
+  overflow-y:auto;             /* ✅ ONLY vertical scroll lives here */
+  -webkit-overflow-scrolling:touch;
+
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
 
     .toast{
       position:fixed;
