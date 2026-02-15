@@ -1,4 +1,4 @@
-/* Beat Sheet Pro - app.js (FULL REPLACE v_IDB_AUDIO_ONE_PAGE_SWIPE_TRAP_RECORD_MIX_FIX_v2) */
+/* Beat Sheet Pro - app.js (FULL REPLACE v_IDB_AUDIO_SIMPLE_PAGER_ONE_PAGE_ONLY_v1) */
 (() => {
 "use strict";
 
@@ -45,7 +45,6 @@ const els = {
   headerToggle: need("headerToggle"),
   headerToggle2: need("headerToggle2"),
 
-  sectionTabs: need("sectionTabs"),
   bars: need("bars"),
 
   recordBtn: need("recordBtn"),
@@ -106,7 +105,10 @@ const SECTION_DEFS = [
 ];
 
 const FULL_ORDER = ["verse1","chorus1","verse2","chorus2","verse3","bridge","chorus3"];
-const PAGE_ORDER = [...FULL_ORDER, "full"];
+
+// ✅ SIMPLE pager order (NO wrap). FULL is first so it's 1 swipe to Verse 1.
+const PAGE_ORDER = ["full", ...FULL_ORDER];
+
 const FULL_HEADINGS = FULL_ORDER.map(k => (SECTION_DEFS.find(s=>s.key===k)?.title || k).toUpperCase());
 const headingSet = new Set(FULL_HEADINGS);
 
@@ -631,7 +633,7 @@ function newProject(name=""){
     name: name || "",
     createdAt: nowISO(),
     updatedAt: nowISO(),
-    activeSection: "verse1",
+    activeSection: "full", // ✅ start on FULL now
     bpm: 95,
     highlightMode: "all",
     recordings: [], // ✅ metadata only; audio blobs in IndexedDB
@@ -661,7 +663,7 @@ function repairProject(p){
       p.sections[def.key] = { key:def.key, title:def.title, bars:Array.from({length:def.bars+def.extra}, ()=>({text:""})) };
     }
   }
-  if(!p.activeSection) p.activeSection = "verse1";
+  if(!p.activeSection) p.activeSection = "full";
   if(!Array.isArray(p.recordings)) p.recordings = [];
   if(!p.bpm) p.bpm = 95;
   p.highlightMode = "all";
@@ -671,6 +673,9 @@ function repairProject(p){
     if(!r.kind) r.kind = "take";
     if(!r.blobId && r.id) r.blobId = r.blobId || r.id;
   });
+
+  // ensure activeSection is valid
+  if(!PAGE_ORDER.includes(p.activeSection)) p.activeSection = "full";
 
   return p;
 }
@@ -726,10 +731,6 @@ function renderProjectPicker(){
 
 /***********************
 ✅ AUDIO ENGINE (metronome + record mix bus)
-IMPORTANT FIX:
-- Playback is now WebAudio BufferSource (NOT <audio> element)
-- That guarantees the mp3/track is in the SAME graph as the mic
-- MediaRecorder records recordDest.stream => includes mic + mp3 + metronome
 ***********************/
 let audioCtx = null;
 let metroGain = null;
@@ -764,7 +765,7 @@ function ensureAudio(){
 }
 
 /***********************
-✅ TRAP DRUMS (closed hat + kick + snare)
+✅ TRAP DRUMS
 ***********************/
 function playKick(){
   ensureAudio();
@@ -948,7 +949,6 @@ function handleDrumPress(which){
 
 /***********************
 ✅ PLAYBACK (WebAudio buffer) + BPM SYNC HIGHLIGHT
-Fix: guaranteed record mix includes MP3/track
 ***********************/
 const decodedCache = new Map(); // key: blobId/id -> AudioBuffer
 
@@ -959,7 +959,6 @@ async function decodeBlobToBuffer(blob){
   ensureAudio();
   const ab = await blobToArrayBuffer(blob);
   return await new Promise((resolve, reject)=>{
-    // Safari can be picky; keep callback form
     audioCtx.decodeAudioData(ab, resolve, reject);
   });
 }
@@ -1021,7 +1020,6 @@ const playback = {
     ensureAudio();
     if(audioCtx.state === "suspended") await audioCtx.resume();
 
-    // stop previous
     this.stop(false);
 
     this.recId = rec.id;
@@ -1055,7 +1053,6 @@ const playback = {
     src.connect(playbackGain);
 
     src.onended = () => {
-      // if user stopped, _src is null already
       if(this._src === src){
         this.stop(true);
       }
@@ -1174,7 +1171,6 @@ async function startRecording(){
   if(mimeType) opts.mimeType = mimeType;
   opts.audioBitsPerSecond = 64000;
 
-  // ✅ recordDest stream contains: playbackGain + metroGain + micGain
   recorder = new MediaRecorder(recordDest.stream, opts);
 
   recorder.ondataavailable = (e)=>{
@@ -1230,18 +1226,9 @@ async function handleUploadFile(file){
 
   await idbPutAudio({ id, blob: file, name, mime, createdAt: nowISO() });
 
-  // clear decode cache if same id reused (rare)
   decodedCache.delete(id);
 
-  const rec = {
-    id,
-    blobId: id,
-    name,
-    createdAt: nowISO(),
-    mime,
-    kind: "track"
-  };
-
+  const rec = { id, blobId: id, name, createdAt: nowISO(), mime, kind: "track" };
   p.recordings.unshift(rec);
   touchProject(p);
   renderRecordings();
@@ -1322,63 +1309,87 @@ function updateRhymesFromFullCaret(fullTa){
   updateRhymes("");
 }
 
-document.addEventListener("selectionchange", ()=>{
-  const p = getActiveProject();
-  if(p.activeSection !== "full") return;
-  const ta = document.getElementById("fullEditor");
-  if(!ta) return;
-  if(document.activeElement !== ta) return;
-  updateRhymesFromFullCaret(ta);
-}, { passive:true });
-
 /***********************
-✅ ONE-PAGE SWIPE (collapsed horizontal pager)
-FIX v2: stops “flying” through multiple pages
-- direction lock (only hijack when horizontal wins)
-- prevent native momentum by preventing default earlier
-- infinite recenter is disabled while dragging
+✅ SIMPLE ONE-PAGE PAGER (NO INFINITE LOOP)
+- moves only 1 page per swipe
+- does NOT wrap (prevents Verse1 -> Chorus3 jumps)
+- ignores swipes that start on inputs/textareas/buttons
 ***********************/
-let pagesCopyWidth = 0;
-let pageViewportW = 0;
+function buildPager(p){
+  const pager = document.createElement("div");
+  pager.className = "pager";
+  pager.id = "pagesPager";
+
+  for(const key of PAGE_ORDER){
+    const page = document.createElement("div");
+    page.className = "page";
+    page.dataset.pageKey = key;
+
+    if(key === "full"){
+      page.innerHTML = `<div class="pageTitle">FULL</div>`;
+      const box = document.createElement("div");
+      box.className = "fullBox";
+      box.innerHTML = `
+        <div class="fullSub">
+          Paste + edit. Rhymes follow the last word on the line above your cursor. Use "/" for manual beat breaks.
+        </div>
+        <textarea class="fullEditor" spellcheck="false"></textarea>
+      `;
+      page.appendChild(box);
+      pager.appendChild(page);
+      continue;
+    }
+
+    const title = (SECTION_DEFS.find(s=>s.key===key)?.title || key).toUpperCase();
+    page.innerHTML = `<div class="pageTitle">${escapeHtml(title)}</div>`;
+
+    const mount = document.createElement("div");
+    mount.style.display = "flex";
+    mount.style.flexDirection = "column";
+    mount.style.gap = "10px";
+
+    renderSectionBarsInto(p, key, mount);
+    page.appendChild(mount);
+    pager.appendChild(page);
+  }
+
+  return pager;
+}
 
 function measurePager(pagerEl){
-  const groups = pagerEl.querySelectorAll(".pageGroup");
-  const mid = groups[1] || groups[0];
-  if(mid){
-    pagesCopyWidth = Math.round(mid.getBoundingClientRect().width);
-    pageViewportW = Math.round(pagesCopyWidth / PAGE_ORDER.length);
-    return;
-  }
-  const w = Math.round(pagerEl.clientWidth || pagerEl.getBoundingClientRect().width || 0);
-  pageViewportW = Math.max(0, w);
-  pagesCopyWidth = pageViewportW * PAGE_ORDER.length;
-}
-function getMidStart(pagerEl){
-  const groups = pagerEl.querySelectorAll(".pageGroup");
-  return (groups[1]?.offsetLeft) || pagesCopyWidth;
-}
-function getCurrentIdx(pagerEl){
-  if(!pagesCopyWidth || !pageViewportW) measurePager(pagerEl);
-  const midStart = getMidStart(pagerEl);
-  const x = pagerEl.scrollLeft;
-  const rel = ((x - midStart) % pagesCopyWidth + pagesCopyWidth) % pagesCopyWidth;
-  let idx = Math.round(rel / pageViewportW);
-  idx = Math.max(0, Math.min(PAGE_ORDER.length-1, idx));
-  return idx;
-}
-function snapToIdx(pagerEl, idx, behavior="auto"){
-  if(!pagesCopyWidth || !pageViewportW) measurePager(pagerEl);
-  const midStart = getMidStart(pagerEl);
-  idx = Math.max(0, Math.min(PAGE_ORDER.length-1, idx));
-  const left = Math.round(midStart + idx * pageViewportW);
-  pagerEl.scrollTo({ left, behavior });
+  const w = Math.round(pagerEl.getBoundingClientRect().width || pagerEl.clientWidth || window.innerWidth);
+  return Math.max(1, w);
 }
 
-function setupOnePageSwipe(pagerEl){
-  // try to keep browser from doing its own fling
+function getCurrentIdx(pagerEl){
+  const w = measurePager(pagerEl);
+  const idx = Math.round(pagerEl.scrollLeft / w);
+  return Math.max(0, Math.min(PAGE_ORDER.length-1, idx));
+}
+
+function snapToIdx(pagerEl, idx, behavior="auto"){
+  const w = measurePager(pagerEl);
+  idx = Math.max(0, Math.min(PAGE_ORDER.length-1, idx));
+  pagerEl.scrollTo({ left: idx * w, behavior });
+}
+
+function setActiveSectionFromIdx(p, idx){
+  const key = PAGE_ORDER[idx] || "full";
+  if(p.activeSection !== key){
+    p.activeSection = key;
+    touchProject(p);
+  }
+}
+
+function shouldIgnoreSwipeStart(target){
+  if(!target) return false;
+  return !!target.closest("textarea, input, select, button, .rhymeDock, .iconBtn, .projIconBtn");
+}
+
+function setupOnePageSwipe(pagerEl, p){
   pagerEl.style.touchAction = "pan-y";
   pagerEl.style.overscrollBehavior = "contain";
-  pagerEl.style.webkitOverflowScrolling = "auto"; // iOS: reduce momentum
+  pagerEl.style.webkitOverflowScrolling = "auto";
   pagerEl.style.scrollBehavior = "auto";
 
   let dragging = false;
@@ -1388,14 +1399,8 @@ function setupOnePageSwipe(pagerEl){
   let startScroll = 0;
   let startIdx = 0;
 
-  const setDragging = (v)=>{
-    dragging = v;
-    pagerEl.__bsDragging = v; // shared with infinite recenter + tab sync
-  };
-
   const onStart = (clientX, clientY)=>{
-    if(!pagesCopyWidth || !pageViewportW) measurePager(pagerEl);
-    setDragging(true);
+    dragging = true;
     horizontalLock = false;
     startX = clientX;
     startY = clientY;
@@ -1410,46 +1415,47 @@ function setupOnePageSwipe(pagerEl){
     const dx = clientX - startX;
     const dy = clientY - startY;
 
-    // direction lock: only hijack when horizontal wins
     if(!horizontalLock){
       if(Math.abs(dx) > Math.abs(dy) + 6){
         horizontalLock = true;
       }else{
-        // let vertical scroll happen (don’t preventDefault)
-        return;
+        return; // let vertical scroll happen
       }
     }
 
-    // we are handling horizontal now
     if(e && e.cancelable) e.preventDefault();
     pagerEl.scrollLeft = startScroll - dx;
   };
 
   const onEnd = (clientX)=>{
     if(!dragging) return;
-    setDragging(false);
+    dragging = false;
     pagerEl.classList.remove("dragging");
 
     const dx = clientX - startX;
-    const threshold = Math.max(42, Math.round(window.innerWidth * 0.14));
-
+    const threshold = Math.max(36, Math.round(window.innerWidth * 0.12)); // ✅ easier swipe
     let target = startIdx;
 
     if(horizontalLock && Math.abs(dx) >= threshold){
       target = startIdx + (dx < 0 ? 1 : -1);
     }else{
-      // snap back to nearest (but still enforce ±1)
-      target = getCurrentIdx(pagerEl);
+      target = getCurrentIdx(pagerEl); // nearest
     }
 
+    // ✅ hard limit: only ±1 page
     if(target > startIdx + 1) target = startIdx + 1;
     if(target < startIdx - 1) target = startIdx - 1;
 
+    // ✅ clamp to ends (NO WRAP)
+    target = Math.max(0, Math.min(PAGE_ORDER.length-1, target));
+
     snapToIdx(pagerEl, target, "smooth");
+    setActiveSectionFromIdx(p, target);
   };
 
   // touch
   pagerEl.addEventListener("touchstart", (e)=>{
+    if(shouldIgnoreSwipeStart(e.target)) return;
     if(!e.touches || !e.touches.length) return;
     const t = e.touches[0];
     onStart(t.clientX, t.clientY);
@@ -1469,101 +1475,27 @@ function setupOnePageSwipe(pagerEl){
   // mouse
   pagerEl.addEventListener("mousedown", (e)=>{
     if(e.button !== 0) return;
+    if(shouldIgnoreSwipeStart(e.target)) return;
     onStart(e.clientX, e.clientY);
   });
 
-  window.addEventListener("mousemove", (e)=>{
-    onMove(e.clientX, e.clientY, e);
-  });
+  window.addEventListener("mousemove", (e)=>onMove(e.clientX, e.clientY, e));
+  window.addEventListener("mouseup", (e)=>onEnd(e.clientX));
 
-  window.addEventListener("mouseup", (e)=>{
-    onEnd(e.clientX);
-  });
-}
-
-/***********************
-✅ INFINITE PAGES (3 groups) + one-page swipe snap
-FIX v2:
-- NO recenter while dragging
-- NO activeSection “spam” while dragging
-***********************/
-function setupInfinitePager(pagerEl){
-  requestAnimationFrame(()=>{
-    measurePager(pagerEl);
-    if(!pagesCopyWidth || !pageViewportW) return;
-
-    const midStart = getMidStart(pagerEl);
-    pagerEl.scrollLeft = midStart;
-
-    let adjusting = false;
-
-    pagerEl.addEventListener("scroll", ()=>{
-      // do not recenter while user is dragging
-      if(pagerEl.__bsDragging) return;
-      if(adjusting) return;
-
-      const midS = getMidStart(pagerEl);
-      const x = pagerEl.scrollLeft;
-
-      const limit = pagesCopyWidth * 0.92; // wider = fewer bounce loops
-
-      if(x < midS - limit){
-        adjusting = true;
-        pagerEl.scrollLeft = x + pagesCopyWidth;
-        requestAnimationFrame(()=>{ adjusting = false; });
-        return;
-      }
-      if(x > midS + limit){
-        adjusting = true;
-        pagerEl.scrollLeft = x - pagesCopyWidth;
-        requestAnimationFrame(()=>{ adjusting = false; });
-        return;
-      }
-    }, { passive:true });
-
-    setupOnePageSwipe(pagerEl);
-
-    window.addEventListener("resize", ()=>{
+  // if user scrolls by other means (trackpad), sync activeSection after it settles
+  let settleTimer = null;
+  pagerEl.addEventListener("scroll", ()=>{
+    if(settleTimer) clearTimeout(settleTimer);
+    settleTimer = setTimeout(()=>{
       const idx = getCurrentIdx(pagerEl);
-      measurePager(pagerEl);
-      snapToIdx(pagerEl, idx, "auto");
-    }, { passive:true });
-  });
-}
+      setActiveSectionFromIdx(p, idx);
+    }, 90);
+  }, { passive:true });
 
-function scrollPagerToSection(pagerEl, key){
-  if(!pagesCopyWidth || !pageViewportW) measurePager(pagerEl);
-  const idx = PAGE_ORDER.indexOf(key);
-  if(idx < 0) return;
-  snapToIdx(pagerEl, idx, "auto");
-}
-
-/***********************
-✅ tabs rendering
-***********************/
-function renderTabs(){
-  const p = getActiveProject();
-  if(!els.sectionTabs) return;
-  els.sectionTabs.innerHTML = "";
-
-  const items = [
-    ...SECTION_DEFS.map(s => ({ key:s.key, title:s.title })),
-    { key:"full", title:"Full" }
-  ];
-
-  for(const it of items){
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "tab" + (p.activeSection === it.key ? " active" : "");
-    btn.textContent = it.title;
-    btn.dataset.key = it.key;
-    btn.addEventListener("click", ()=>{
-      p.activeSection = it.key;
-      touchProject(p);
-      renderAll();
-    });
-    els.sectionTabs.appendChild(btn);
-  }
+  window.addEventListener("resize", ()=>{
+    const idx = PAGE_ORDER.indexOf(p.activeSection || "full");
+    snapToIdx(pagerEl, Math.max(0, idx), "auto");
+  }, { passive:true });
 }
 
 /***********************
@@ -1665,138 +1597,43 @@ function renderSectionBarsInto(p, sectionKey, mountEl){
 }
 
 /***********************
-✅ renderBars
+✅ renderBars (NOW ALWAYS PAGER)
 ***********************/
 function renderBars(){
   const p = getActiveProject();
   if(!els.bars) return;
 
-  if(isCollapsed()){
-    els.bars.innerHTML = "";
+  els.bars.innerHTML = "";
+  const pager = buildPager(p);
+  els.bars.appendChild(pager);
 
-    const pager = document.createElement("div");
-    pager.className = "pager";
-    pager.id = "pagesPager";
+  // wire FULL editor
+  const fullTa = els.bars.querySelector(".fullEditor");
+  if(fullTa){
+    fullTa.value = buildFullTextFromProject(p);
 
-    for(let g=1; g<=3; g++){
-      const group = document.createElement("div");
-      group.className = "pageGroup";
-      group.dataset.pagesGroup = String(g);
-
-      for(const key of PAGE_ORDER){
-        const page = document.createElement("div");
-        page.className = "page";
-        page.dataset.pageKey = key;
-
-        if(key === "full"){
-          page.innerHTML = `<div class="pageTitle">FULL</div>`;
-          const box = document.createElement("div");
-          box.className = "fullBox";
-          box.innerHTML = `
-            <div class="fullSub">
-              Paste + edit. Rhymes follow the last word on the line above your cursor. Use "/" for manual beat breaks.
-            </div>
-            <textarea class="fullEditor" spellcheck="false"></textarea>
-          `;
-          page.appendChild(box);
-          group.appendChild(page);
-          continue;
-        }
-
-        const title = (SECTION_DEFS.find(s=>s.key===key)?.title || key).toUpperCase();
-        page.innerHTML = `<div class="pageTitle">${escapeHtml(title)}</div>`;
-
-        const mount = document.createElement("div");
-        mount.style.display = "flex";
-        mount.style.flexDirection = "column";
-        mount.style.gap = "10px";
-
-        renderSectionBarsInto(p, key, mount);
-        page.appendChild(mount);
-        group.appendChild(page);
-      }
-
-      pager.appendChild(group);
-    }
-
-    els.bars.appendChild(pager);
-
-    const fullTa = els.bars.querySelector(".fullEditor");
-    if(fullTa){
-      fullTa.value = buildFullTextFromProject(p);
-
-      let tmr = null;
-      const commit = () => applyFullTextToProject(p, fullTa.value || "");
-      const refresh = () => { updateRhymesFromFullCaret(fullTa); updateDockForKeyboard(); };
-
-      refresh();
-
-      fullTa.addEventListener("input", ()=>{
-        if(tmr) clearTimeout(tmr);
-        tmr = setTimeout(commit, 220);
-        refresh();
-      });
-      fullTa.addEventListener("click", refresh);
-      fullTa.addEventListener("keyup", refresh);
-      fullTa.addEventListener("focus", refresh);
-    }
-
-    setupInfinitePager(pager);
-    requestAnimationFrame(()=>scrollPagerToSection(pager, p.activeSection || "verse1"));
-
-    pager.addEventListener("scroll", ()=>{
-      if(pager.__bsDragging) return; // ✅ stop rapid updates while swiping
-      if(!pagesCopyWidth || !pageViewportW) return;
-      const idx = getCurrentIdx(pager);
-      const key = PAGE_ORDER[idx];
-      if(key && key !== p.activeSection){
-        p.activeSection = key;
-        touchProject(p);
-      }
-    }, { passive:true });
-
-    return;
-  }
-
-  if(p.activeSection === "full"){
-    const fullText = buildFullTextFromProject(p);
-    els.bars.innerHTML = `
-      <div class="fullBox">
-        <div class="fullSub">
-          Paste + edit. Rhymes follow the last word on the line above your cursor. Use "/" for manual beat breaks.
-        </div>
-        <textarea id="fullEditor" class="fullEditor" spellcheck="false">${escapeHtml(fullText)}</textarea>
-      </div>
-    `;
-
-    const ta = document.getElementById("fullEditor");
     let tmr = null;
-
-    const commit = () => applyFullTextToProject(p, ta.value || "");
-    const refresh = () => { updateRhymesFromFullCaret(ta); updateDockForKeyboard(); };
+    const commit = () => applyFullTextToProject(p, fullTa.value || "");
+    const refresh = () => { updateRhymesFromFullCaret(fullTa); updateDockForKeyboard(); };
 
     refresh();
 
-    ta.addEventListener("input", ()=>{
+    fullTa.addEventListener("input", ()=>{
       if(tmr) clearTimeout(tmr);
       tmr = setTimeout(commit, 220);
       refresh();
     });
-    ta.addEventListener("click", refresh);
-    ta.addEventListener("keyup", refresh);
-    ta.addEventListener("focus", refresh);
-    return;
+    fullTa.addEventListener("click", refresh);
+    fullTa.addEventListener("keyup", refresh);
+    fullTa.addEventListener("focus", refresh);
   }
 
-  els.bars.innerHTML = "";
-  const mount = document.createElement("div");
-  mount.id = "barsMount";
-  mount.style.display = "flex";
-  mount.style.flexDirection = "column";
-  mount.style.gap = "10px";
-  els.bars.appendChild(mount);
+  // snap to saved page
+  const idx = Math.max(0, PAGE_ORDER.indexOf(p.activeSection || "full"));
+  snapToIdx(pager, idx, "auto");
 
-  renderSectionBarsInto(p, p.activeSection, mount);
+  // install swipe
+  setupOnePageSwipe(pager, p);
 }
 
 /***********************
@@ -1967,7 +1804,6 @@ function renderAll(){
   if(els.bpm) els.bpm.value = p.bpm || 95;
 
   renderProjectPicker();
-  renderTabs();
   renderBars();
   renderRecordings();
 
