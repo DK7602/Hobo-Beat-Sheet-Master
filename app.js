@@ -1,4 +1,4 @@
-/* Beat Sheet Pro - app.js (FULL REPLACE v_IDB_AUDIO_ONE_PAGE_SWIPE_TRAP_RECORD_MIX_FIX) */
+/* Beat Sheet Pro - app.js (FULL REPLACE v_IDB_AUDIO_ONE_PAGE_SWIPE_TRAP_RECORD_MIX_FIX_v2) */
 (() => {
 "use strict";
 
@@ -297,8 +297,8 @@ window.updateBlinkTargets = window.updateBlinkTargets || function(){};
 function loadHeaderCollapsed(){
   try{ return localStorage.getItem(HEADER_COLLAPSED_KEY) === "1"; }catch{ return false; }
 }
-function saveHeaderCollapsed(isCollapsed){
-  try{ localStorage.setItem(HEADER_COLLAPSED_KEY, isCollapsed ? "1" : "0"); }catch{}
+function saveHeaderCollapsed(isCollapsed2){
+  try{ localStorage.setItem(HEADER_COLLAPSED_KEY, isCollapsed2 ? "1" : "0"); }catch{}
 }
 function setHeaderCollapsed(isCol){
   document.body.classList.toggle("headerCollapsed", !!isCol);
@@ -725,14 +725,16 @@ function renderProjectPicker(){
 }
 
 /***********************
-✅ AUDIO ENGINE (metronome + recording bus + playback mix)
+✅ AUDIO ENGINE (metronome + record mix bus)
+IMPORTANT FIX:
+- Playback is now WebAudio BufferSource (NOT <audio> element)
+- That guarantees the mp3/track is in the SAME graph as the mic
+- MediaRecorder records recordDest.stream => includes mic + mp3 + metronome
 ***********************/
 let audioCtx = null;
 let metroGain = null;
-let recordDest = null;
-
-// ✅ NEW: playback routing (so recording captures mp3 too)
 let playbackGain = null;
+let recordDest = null;
 
 let metroTimer = null;
 let metroBeat16 = 0;
@@ -751,11 +753,11 @@ function ensureAudio(){
 
     recordDest = audioCtx.createMediaStreamDestination();
 
-    // What the user hears
+    // user hears
     metroGain.connect(audioCtx.destination);
     playbackGain.connect(audioCtx.destination);
 
-    // What gets recorded
+    // recorder hears
     metroGain.connect(recordDest);
     playbackGain.connect(recordDest);
   }
@@ -809,7 +811,6 @@ function playSnare(){
   noise.stop(t + 0.16);
 }
 
-// ✅ closed hat with optional "amp" + very short decay
 function playHat(atTime = null, amp = 0.18){
   ensureAudio();
   const t = atTime ?? audioCtx.currentTime;
@@ -868,7 +869,6 @@ function startMetronome(){
   if(audioCtx.state === "suspended") audioCtx.resume();
   stopMetronome();
 
-  // if MP3 playing, keep it playing (user wants it)
   metroOn = true;
   metroBeat16 = 0;
   startEyePulseFromBpm();
@@ -881,15 +881,12 @@ function startMetronome(){
     const step16 = metroBeat16 % 16;
     const beatInBar = Math.floor(step16 / 4);
 
-    // ✅ Trap grooves (hat + kick + snare only)
     if(activeDrum === 1){
-      // Basic trap: hats all 16ths, snare on 2/4, simple kick
       playHat(null, (step16 % 4 === 2) ? 0.14 : 0.18);
       if(step16 === 0 || step16 === 7 || step16 === 10) playKick();
       if(step16 === 4 || step16 === 12) playSnare();
 
     }else if(activeDrum === 2){
-      // Bouncy: hats 16ths with a couple doubles, kick more syncopated
       const t = audioCtx.currentTime;
       playHat(t, 0.17);
       if(step16 === 3 || step16 === 11){
@@ -899,7 +896,6 @@ function startMetronome(){
       if(step16 === 4 || step16 === 12) playSnare();
 
     }else if(activeDrum === 3){
-      // Roll-ish: hats 16ths + quick roll near end of bar
       const t = audioCtx.currentTime;
       playHat(t, (step16 % 2 === 0) ? 0.18 : 0.14);
 
@@ -911,7 +907,6 @@ function startMetronome(){
       if(step16 === 4 || step16 === 12) playSnare();
 
     }else{
-      // Sparse/dark: hats on 8ths + occasional 16th pickup
       const t = audioCtx.currentTime;
       if(step16 % 2 === 0) playHat(t, 0.18);
       if(step16 === 7 || step16 === 15) playHat(t, 0.12);
@@ -952,48 +947,63 @@ function handleDrumPress(which){
 }
 
 /***********************
-✅ PLAYBACK (single audio element) + BPM SYNC HIGHLIGHT
-✅ routed through WebAudio so recording captures MP3 too
+✅ PLAYBACK (WebAudio buffer) + BPM SYNC HIGHLIGHT
+Fix: guaranteed record mix includes MP3/track
 ***********************/
+const decodedCache = new Map(); // key: blobId/id -> AudioBuffer
+
+async function blobToArrayBuffer(blob){
+  return await blob.arrayBuffer();
+}
+async function decodeBlobToBuffer(blob){
+  ensureAudio();
+  const ab = await blobToArrayBuffer(blob);
+  return await new Promise((resolve, reject)=>{
+    // Safari can be picky; keep callback form
+    audioCtx.decodeAudioData(ab, resolve, reject);
+  });
+}
+
 const playback = {
-  el: null,
-  recId: null,
   isPlaying: false,
+  recId: null,
+
+  _buf: null,
+  _src: null,
+  _startTime: 0,
+  _offset: 0, // seconds
   raf: null,
   lastBeat: -1,
-  objUrl: null,
 
-  // internal audio graph nodes
-  _srcNode: null,
+  stop(fromEnded){
+    if(this.raf) cancelAnimationFrame(this.raf);
+    this.raf = null;
+    this.lastBeat = -1;
 
-  ensure(){
-    if(this.el) return;
-    this.el = new Audio();
-    this.el.preload = "auto";
-    this.el.playsInline = true;
-
-    // ✅ IMPORTANT: route through AudioContext so we can record it
-    ensureAudio();
-    try{
-      this._srcNode = audioCtx.createMediaElementSource(this.el);
-      this._srcNode.connect(playbackGain);
-    }catch(e){
-      // If this ever fails (rare), playback still works, but recording won't include mp3.
-      console.error("MediaElementSource failed:", e);
+    if(this._src){
+      try{ this._src.onended = null; }catch{}
+      try{ this._src.stop(0); }catch{}
+      try{ this._src.disconnect(); }catch{}
     }
+    this._src = null;
+    this._buf = null;
+    this._offset = 0;
+    this._startTime = 0;
 
-    this.el.addEventListener("ended", ()=>this.stop(true));
-    this.el.addEventListener("pause", ()=>{
-      if(this.isPlaying) this.stop(true);
-    });
+    this.isPlaying = false;
+    this.recId = null;
+
+    renderRecordings();
+    if(!(metroOn || recording)) stopEyePulse();
+    if(fromEnded) showToast("Done");
   },
 
-  startSyncLoop(){
+  _startSyncLoop(){
     const loop = () => {
-      if(!this.isPlaying || !this.el) return;
+      if(!this.isPlaying || !this._buf) return;
 
       const bpm = getProjectBpm();
-      const t = Math.max(0, Number(this.el.currentTime || 0));
+      const t = Math.max(0, (audioCtx.currentTime - this._startTime) + this._offset);
       const beatPos = (t * bpm) / 60;
       const beatInBar = Math.floor(beatPos) % 4;
 
@@ -1008,10 +1018,10 @@ const playback = {
   },
 
   async playRec(rec){
-    this.ensure();
+    ensureAudio();
+    if(audioCtx.state === "suspended") await audioCtx.resume();
 
-    // if metronome is on, leave it (user might want it); otherwise do nothing
-    // stop any previous audio
+    // stop previous
     this.stop(false);
 
     this.recId = rec.id;
@@ -1024,52 +1034,51 @@ const playback = {
       return;
     }
 
-    if(this.objUrl) URL.revokeObjectURL(this.objUrl);
-    this.objUrl = URL.createObjectURL(blob);
+    const cacheKey = rec.blobId || rec.id;
+    let buf = decodedCache.get(cacheKey);
+    if(!buf){
+      try{
+        buf = await decodeBlobToBuffer(blob);
+        decodedCache.set(cacheKey, buf);
+      }catch(e){
+        console.error(e);
+        showToast("Can't decode audio");
+        this.recId = null;
+        return;
+      }
+    }
 
-    this.el.src = this.objUrl;
+    this._buf = buf;
+
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    src.connect(playbackGain);
+
+    src.onended = () => {
+      // if user stopped, _src is null already
+      if(this._src === src){
+        this.stop(true);
+      }
+    };
+
+    this._src = src;
+    this._offset = 0;
+    this._startTime = audioCtx.currentTime;
+
     this.isPlaying = true;
     startEyePulseFromBpm();
 
     try{
-      await this.el.play();
+      src.start(0, this._offset);
     }catch(e){
       console.error(e);
-      this.isPlaying = false;
-      this.recId = null;
-      if(this.objUrl){ URL.revokeObjectURL(this.objUrl); this.objUrl = null; }
-      stopEyePulse();
-      showToast("Play blocked (tap again)");
-      renderRecordings();
+      this.stop(false);
+      showToast("Play failed");
       return;
     }
 
-    this.startSyncLoop();
+    this._startSyncLoop();
     renderRecordings();
-  },
-
-  stop(fromEnded){
-    if(this.raf) cancelAnimationFrame(this.raf);
-    this.raf = null;
-    this.lastBeat = -1;
-
-    if(this.el){
-      try{ this.el.pause(); }catch{}
-      if(fromEnded){
-        try{ this.el.currentTime = 0; }catch{}
-      }
-    }
-
-    if(this.objUrl){
-      try{ URL.revokeObjectURL(this.objUrl); }catch{}
-      this.objUrl = null;
-    }
-
-    this.isPlaying = false;
-    this.recId = null;
-
-    renderRecordings();
-    if(!(metroOn || recording)) stopEyePulse();
   }
 };
 
@@ -1123,9 +1132,12 @@ async function ensureMic(){
   micSource = audioCtx.createMediaStreamSource(micStream);
   micGain = audioCtx.createGain();
   micGain.gain.value = 1.0;
+
+  // mic -> record bus ONLY (no feedback to speakers)
   micSource.connect(micGain);
   micGain.connect(recordDest);
 }
+
 function pickBestMime(){
   const candidates = ["audio/webm;codecs=opus","audio/webm","audio/ogg;codecs=opus","audio/ogg"];
   for(const m of candidates){
@@ -1152,9 +1164,6 @@ async function startRecording(){
   ensureAudio();
   if(audioCtx.state === "suspended") await audioCtx.resume();
 
-  // ✅ DO NOT stop playback anymore — user wants mp3 + voice in the recording
-  // playback.stop(false);
-
   recChunks = [];
   recording = true;
   updateRecordButtonUI();
@@ -1165,6 +1174,7 @@ async function startRecording(){
   if(mimeType) opts.mimeType = mimeType;
   opts.audioBitsPerSecond = 64000;
 
+  // ✅ recordDest stream contains: playbackGain + metroGain + micGain
   recorder = new MediaRecorder(recordDest.stream, opts);
 
   recorder.ondataavailable = (e)=>{
@@ -1219,6 +1229,9 @@ async function handleUploadFile(file){
   const mime = file.type || "audio/*";
 
   await idbPutAudio({ id, blob: file, name, mime, createdAt: nowISO() });
+
+  // clear decode cache if same id reused (rare)
+  decodedCache.delete(id);
 
   const rec = {
     id,
@@ -1320,9 +1333,10 @@ document.addEventListener("selectionchange", ()=>{
 
 /***********************
 ✅ ONE-PAGE SWIPE (collapsed horizontal pager)
-FIX: prevents “flying” through multiple pages
-- We disable momentum by manually dragging scrollLeft
-- TouchEnd snaps to ONLY ±1 page from start
+FIX v2: stops “flying” through multiple pages
+- direction lock (only hijack when horizontal wins)
+- prevent native momentum by preventing default earlier
+- infinite recenter is disabled while dragging
 ***********************/
 let pagesCopyWidth = 0;
 let pageViewportW = 0;
@@ -1361,100 +1375,117 @@ function snapToIdx(pagerEl, idx, behavior="auto"){
 }
 
 function setupOnePageSwipe(pagerEl){
-  pagerEl.style.touchAction = "pan-y"; // ✅ allow vertical scrolling inside, block fling
+  // try to keep browser from doing its own fling
+  pagerEl.style.touchAction = "pan-y";
+  pagerEl.style.overscrollBehavior = "contain";
+  pagerEl.style.webkitOverflowScrolling = "auto"; // iOS: reduce momentum
+  pagerEl.style.scrollBehavior = "auto";
 
   let dragging = false;
+  let horizontalLock = false;
   let startX = 0;
+  let startY = 0;
   let startScroll = 0;
   let startIdx = 0;
+
+  const setDragging = (v)=>{
+    dragging = v;
+    pagerEl.__bsDragging = v; // shared with infinite recenter + tab sync
+  };
+
+  const onStart = (clientX, clientY)=>{
+    if(!pagesCopyWidth || !pageViewportW) measurePager(pagerEl);
+    setDragging(true);
+    horizontalLock = false;
+    startX = clientX;
+    startY = clientY;
+    startScroll = pagerEl.scrollLeft;
+    startIdx = getCurrentIdx(pagerEl);
+    pagerEl.classList.add("dragging");
+  };
+
+  const onMove = (clientX, clientY, e)=>{
+    if(!dragging) return;
+
+    const dx = clientX - startX;
+    const dy = clientY - startY;
+
+    // direction lock: only hijack when horizontal wins
+    if(!horizontalLock){
+      if(Math.abs(dx) > Math.abs(dy) + 6){
+        horizontalLock = true;
+      }else{
+        // let vertical scroll happen (don’t preventDefault)
+        return;
+      }
+    }
+
+    // we are handling horizontal now
+    if(e && e.cancelable) e.preventDefault();
+    pagerEl.scrollLeft = startScroll - dx;
+  };
+
+  const onEnd = (clientX)=>{
+    if(!dragging) return;
+    setDragging(false);
+    pagerEl.classList.remove("dragging");
+
+    const dx = clientX - startX;
+    const threshold = Math.max(42, Math.round(window.innerWidth * 0.14));
+
+    let target = startIdx;
+
+    if(horizontalLock && Math.abs(dx) >= threshold){
+      target = startIdx + (dx < 0 ? 1 : -1);
+    }else{
+      // snap back to nearest (but still enforce ±1)
+      target = getCurrentIdx(pagerEl);
+    }
+
+    if(target > startIdx + 1) target = startIdx + 1;
+    if(target < startIdx - 1) target = startIdx - 1;
+
+    snapToIdx(pagerEl, target, "smooth");
+  };
 
   // touch
   pagerEl.addEventListener("touchstart", (e)=>{
     if(!e.touches || !e.touches.length) return;
-    if(!pagesCopyWidth || !pageViewportW) measurePager(pagerEl);
-    dragging = true;
-    startX = e.touches[0].clientX;
-    startScroll = pagerEl.scrollLeft;
-    startIdx = getCurrentIdx(pagerEl);
+    const t = e.touches[0];
+    onStart(t.clientX, t.clientY);
   }, { passive:true });
 
   pagerEl.addEventListener("touchmove", (e)=>{
-    if(!dragging || !e.touches || !e.touches.length) return;
-    const x = e.touches[0].clientX;
-    const dx = x - startX;
-
-    // ✅ manual drag = no momentum fling
-    pagerEl.scrollLeft = startScroll - dx;
-
-    // stop browser horizontal scrolling momentum
-    e.preventDefault();
+    if(!e.touches || !e.touches.length) return;
+    const t = e.touches[0];
+    onMove(t.clientX, t.clientY, e);
   }, { passive:false });
 
   pagerEl.addEventListener("touchend", (e)=>{
-    if(!dragging) return;
-    dragging = false;
-
-    const endX = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0].clientX : startX;
-    const dx = endX - startX;
-
-    const threshold = Math.max(40, Math.round(window.innerWidth * 0.12));
-    let target = startIdx;
-
-    if(Math.abs(dx) >= threshold){
-      target = startIdx + (dx < 0 ? 1 : -1);
-    }else{
-      target = getCurrentIdx(pagerEl);
-    }
-
-    // ✅ enforce max 1 page step
-    if(target > startIdx + 1) target = startIdx + 1;
-    if(target < startIdx - 1) target = startIdx - 1;
-
-    snapToIdx(pagerEl, target, "smooth");
+    const t = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0] : null;
+    onEnd(t ? t.clientX : startX);
   }, { passive:true });
 
-  // mouse (desktop)
+  // mouse
   pagerEl.addEventListener("mousedown", (e)=>{
     if(e.button !== 0) return;
-    if(!pagesCopyWidth || !pageViewportW) measurePager(pagerEl);
-    dragging = true;
-    startX = e.clientX;
-    startScroll = pagerEl.scrollLeft;
-    startIdx = getCurrentIdx(pagerEl);
-    pagerEl.classList.add("dragging");
+    onStart(e.clientX, e.clientY);
   });
 
   window.addEventListener("mousemove", (e)=>{
-    if(!dragging) return;
-    const dx = e.clientX - startX;
-    pagerEl.scrollLeft = startScroll - dx;
+    onMove(e.clientX, e.clientY, e);
   });
 
   window.addEventListener("mouseup", (e)=>{
-    if(!dragging) return;
-    dragging = false;
-    pagerEl.classList.remove("dragging");
-
-    const dx = e.clientX - startX;
-    const threshold = Math.max(40, Math.round(window.innerWidth * 0.12));
-    let target = startIdx;
-
-    if(Math.abs(dx) >= threshold){
-      target = startIdx + (dx < 0 ? 1 : -1);
-    }else{
-      target = getCurrentIdx(pagerEl);
-    }
-
-    if(target > startIdx + 1) target = startIdx + 1;
-    if(target < startIdx - 1) target = startIdx - 1;
-
-    snapToIdx(pagerEl, target, "smooth");
+    onEnd(e.clientX);
   });
 }
 
 /***********************
 ✅ INFINITE PAGES (3 groups) + one-page swipe snap
-FIX: guard against scroll-recenter loops
+FIX v2:
+- NO recenter while dragging
+- NO activeSection “spam” while dragging
 ***********************/
 function setupInfinitePager(pagerEl){
   requestAnimationFrame(()=>{
@@ -1467,12 +1498,14 @@ function setupInfinitePager(pagerEl){
     let adjusting = false;
 
     pagerEl.addEventListener("scroll", ()=>{
+      // do not recenter while user is dragging
+      if(pagerEl.__bsDragging) return;
       if(adjusting) return;
+
       const midS = getMidStart(pagerEl);
       const x = pagerEl.scrollLeft;
 
-      // ✅ wider threshold reduces “bounce loops”
-      const limit = pagesCopyWidth * 0.85;
+      const limit = pagesCopyWidth * 0.92; // wider = fewer bounce loops
 
       if(x < midS - limit){
         adjusting = true;
@@ -1490,7 +1523,6 @@ function setupInfinitePager(pagerEl){
 
     setupOnePageSwipe(pagerEl);
 
-    // keep sizing sane on rotate/resize
     window.addEventListener("resize", ()=>{
       const idx = getCurrentIdx(pagerEl);
       measurePager(pagerEl);
@@ -1713,6 +1745,7 @@ function renderBars(){
     requestAnimationFrame(()=>scrollPagerToSection(pager, p.activeSection || "verse1"));
 
     pager.addEventListener("scroll", ()=>{
+      if(pager.__bsDragging) return; // ✅ stop rapid updates while swiping
       if(!pagesCopyWidth || !pageViewportW) return;
       const idx = getCurrentIdx(pager);
       const key = PAGE_ORDER[idx];
@@ -1878,7 +1911,7 @@ function renderRecordings(){
     stopBtn.title = "Stop";
     stopBtn.textContent = "■";
     stopBtn.addEventListener("click", ()=>{
-      playback.stop(true);
+      playback.stop(false);
       showToast("Stop");
     });
 
@@ -1894,11 +1927,13 @@ function renderRecordings(){
     delBtn.textContent = "×";
     delBtn.addEventListener("click", async ()=>{
       try{
-        if(playback.recId === rec.id) playback.stop(true);
+        if(playback.recId === rec.id) playback.stop(false);
         if(editingRecId === rec.id) editingRecId = null;
 
         const id = rec.blobId || rec.id;
         if(id) await idbDeleteAudio(id);
+
+        decodedCache.delete(id);
 
         p.recordings = p.recordings.filter(r=>r.id !== rec.id);
         touchProject(p);
@@ -2035,6 +2070,7 @@ els.newProjectBtn?.addEventListener("click", ()=>{
   store.projects.unshift(p);
   store.activeProjectId = p.id;
   saveStoreSafe();
+  playback.stop(false);
   renderAll();
   showToast("New project");
 });
@@ -2049,6 +2085,7 @@ els.copyProjectBtn?.addEventListener("click", ()=>{
   store.projects.unshift(repairProject(clone));
   store.activeProjectId = clone.id;
   saveStoreSafe();
+  playback.stop(false);
   renderAll();
   showToast("Copied");
 });
@@ -2060,12 +2097,13 @@ els.deleteProjectBtn?.addEventListener("click", async ()=>{
     return;
   }
 
-  playback.stop(true);
+  playback.stop(false);
 
   try{
     for(const rec of (active.recordings || [])){
       const id = rec.blobId || rec.id;
       if(id) await idbDeleteAudio(id);
+      decodedCache.delete(id);
     }
   }catch{}
 
@@ -2082,7 +2120,7 @@ els.projectPicker?.addEventListener("change", ()=>{
   if(store.projects.find(p=>p.id===id)){
     store.activeProjectId = id;
     saveStoreSafe();
-    playback.stop(true);
+    playback.stop(false);
     renderAll();
     showToast("Opened");
   }
