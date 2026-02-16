@@ -1,4 +1,4 @@
-<!-- index.html (FULL REPLACE v_HOBO_BEATSHEET_IDB_SIMPLE_PAGER_CENTER_SCROLL_v2_SPRAYFONT_HLLOCK_v2_NOHSCROLL_OUTLINE_VCENTER_v1) -->
+<!-- index.html (FULL REPLACE v_HOBO_BEATSHEET_IDB_PAGER_CARDS_CARDPLUS_AUTOSCROLL_v3) -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -9,10 +9,8 @@
   <link id="appManifest" rel="manifest" href="./manifest.webmanifest?v=BOOT">
 
   <style>
-    /* ✅ real global box sizing */
     *, *::before, *::after{ box-sizing:border-box; }
 
-    /* ✅ YOUR UPLOADED SPRAY PAINT FONT */
     @font-face{
       font-family: "DeardorfDrip";
       src: url("./Deardorf%20Drip%20Demo.otf") format("opentype");
@@ -36,7 +34,6 @@
       --yellow:#ffd54a;
       --okgreen:#35d07f;
 
-      /* ✅ highlighters */
       --hlBlue:#00E5FF;
       --hlGreen:#39FF14;
     }
@@ -49,7 +46,6 @@
       -webkit-text-size-adjust:100%;
     }
 
-    /* ✅ pager: use container width (NOT 100vw) */
     .pager{
       width:100%;
       display:flex;
@@ -100,15 +96,12 @@
       max-height:28vh;
       overflow:auto;
       -webkit-overflow-scrolling:touch;
-
-      /* ✅ prevent any accidental horizontal scroll in header area */
       overflow-x:hidden;
     }
 
     body.fullMode header{ max-height:16vh; }
     body.fullMode .miniCard{ display:none; }
 
-    /* ✅ COLLAPSED HEADER */
     body.headerCollapsed header{
       max-height:none;
       overflow:hidden;
@@ -123,30 +116,25 @@
     body.headerCollapsed .stickyTools{ margin-top:0; }
     body.headerCollapsed .headerToggleRow{ display:flex; }
 
-    /* ✅ PROTECT HEADSHOT: NEVER WRAP THIS ROW */
     .titleRow{
       display:flex;
-      align-items:center;          /* ✅ centers title area vs headshot row */
+      align-items:center;
       justify-content:space-between;
       gap:6px;
       margin-bottom:6px;
-
       flex-wrap:nowrap;
       min-width:0;
-
-      /* ✅ make sure this row cannot create horizontal scroll */
       overflow:hidden;
     }
 
-    /* ✅ TITLE: vertically centered in its 64px box, no line-height change */
     .title{
       flex:1 1 auto;
       min-width:0;
       margin:0;
 
-      height:64px;                 /* locks top-row height */
+      height:64px;
       display:flex;
-      align-items:center;          /* ✅ vertical center WITHOUT changing line-height */
+      align-items:center;
       justify-content:flex-start;
 
       font-family:"DeardorfDrip", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
@@ -163,7 +151,6 @@
       color: var(--hlBlue);
 
       text-shadow:
-        /* thin black outline */
         -1px 0   0 rgba(0,0,0,.85),
          1px 0   0 rgba(0,0,0,.85),
          0  -1px 0 rgba(0,0,0,.85),
@@ -172,17 +159,13 @@
          1px -1px 0 rgba(0,0,0,.65),
         -1px  1px 0 rgba(0,0,0,.65),
          1px  1px 0 rgba(0,0,0,.65),
-
-        /* highlighter green under-spray */
         2px 1px 0 var(--hlGreen),
         4px 2px 0 rgba(57,255,20,.85),
         8px 5px 14px rgba(57,255,20,.28),
-
-        /* blue glow */
         2px 2px 0 rgba(0,229,255,.95),
         7px 6px 16px rgba(0,229,255,.22);
 
-      transform-origin:left center; /* ✅ keeps your “fill the air” look but centers vertically */
+      transform-origin:left center;
       transform: scaleX(1.85);
       padding-right:10px;
     }
@@ -236,7 +219,6 @@
       border-radius:12px;
     }
 
-    /* ✅ Upload button (circle) */
     .mp3Btn{
       width:40px;
       height:40px;
@@ -298,20 +280,21 @@
 
     .stickyTools{
       display:grid;
-      grid-template-columns: repeat(5, 1fr);
+      grid-template-columns: repeat(6, 1fr);
       gap:10px;
       align-items:stretch;
       margin-top:8px;
     }
+
     .drumBtn{
       display:flex; align-items:center; justify-content:center;
       font-weight:1000;
       border-radius:16px;
       border:2px solid rgba(0,0,0,.12);
       background:#fff; color:#111;
-      padding:10px 0;
-      min-height:56px;
-      font-size:18px;
+      padding:8px 0;
+      min-height:50px;
+      font-size:16px;
       line-height:1;
     }
     .drumBtn.active{
@@ -323,13 +306,30 @@
       box-shadow: 0 0 0 4px rgba(0,0,0,.08);
     }
 
+    .autoBtn{
+      display:flex; align-items:center; justify-content:center;
+      font-weight:1000;
+      border-radius:16px;
+      border:2px solid rgba(0,0,0,.12);
+      background:#fff; color:#111;
+      padding:8px 0;
+      min-height:50px;
+      font-size:14px;
+      line-height:1;
+    }
+    .autoBtn.on{
+      border-color: rgba(53, 208, 127, .95);
+      box-shadow: 0 0 0 4px rgba(53, 208, 127, .18);
+    }
+
     .recordBtn{
       display:flex; align-items:center; justify-content:center;
       font-weight:1000; border-radius:16px;
       border:2px solid var(--red);
       background:var(--red); color:#fff;
-      padding:10px 0; min-height:56px;
-      font-size:14px;
+      padding:8px 0;
+      min-height:50px;
+      font-size:13px;
     }
     .recordBtn.recOn{ background:#111; border-color:#111; }
 
@@ -492,6 +492,12 @@
       padding:10px;
       box-shadow:var(--shadow);
     }
+
+    .bar.barActive{
+      outline:3px solid rgba(0,0,0,.10);
+      outline-offset:2px;
+    }
+
     .barTop{
       display:flex;
       align-items:center;
@@ -505,6 +511,14 @@
       gap:10px;
       min-width:0;
     }
+
+    .barRightBtns{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      flex:0 0 auto;
+    }
+
     .barNum{
       width:34px;
       height:34px;
@@ -540,6 +554,45 @@
     .syllPill.yellow{ border-color: rgba(255, 213, 74, .95); box-shadow:0 0 0 4px rgba(255, 213, 74, .22); }
     .syllPill.red{ border-color: rgba(255, 43, 43, .9); box-shadow:0 0 0 4px rgba(255, 43, 43, .18); }
 
+    /* ✅ Card "+" button (simple +) */
+    .barPlusBtn{
+      width:38px;
+      height:38px;
+      padding:0;
+      border-radius:999px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:20px;
+      font-weight:1000;
+      line-height:1;
+      border:1px solid rgba(0,0,0,.22);
+      background:#fff;
+      color:#111;
+      box-shadow:0 6px 14px rgba(0,0,0,.08);
+      flex:0 0 auto;
+      cursor:pointer;
+    }
+
+    .barDelBtn{
+      width:38px;
+      height:38px;
+      padding:0;
+      border-radius:999px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:20px;
+      font-weight:1000;
+      line-height:1;
+      border:1px solid rgba(255, 43, 43, .55);
+      background: rgba(255, 43, 43, .10);
+      color:#7f1d1d;
+      box-shadow:0 6px 14px rgba(0,0,0,.08);
+      flex:0 0 auto;
+      cursor:pointer;
+    }
+
     textarea{
       width:100%;
       min-height:96px;
@@ -570,6 +623,7 @@
       overflow-wrap:anywhere;
     }
     .beat.snare{ background:var(--snare); }
+
     .beat.flash{
       background:var(--hl) !important;
       box-shadow:0 0 0 4px rgba(255,230,106,.45);
@@ -744,6 +798,9 @@
       <button id="drum2Btn" class="drumBtn" type="button" aria-label="Drum 2">🥁</button>
       <button id="drum3Btn" class="drumBtn" type="button" aria-label="Drum 3">🥁</button>
       <button id="drum4Btn" class="drumBtn" type="button" aria-label="Drum 4">🥁</button>
+
+      <button id="autoScrollBtn" class="autoBtn" type="button" aria-label="Auto Scroll" title="Auto Scroll">Scroll</button>
+
       <button id="recordBtn" class="recordBtn" type="button">Record</button>
     </div>
 
@@ -779,7 +836,7 @@
   (function(){
     const repo = (location.pathname.split("/").filter(Boolean)[0] || "");
     const base = repo ? ("/" + repo) : "";
-    const v = "SHARED_20260215_CENTER_SCROLL_WRAP_FIX_v2_SPRAYFONT_HLLOCK_v2_NOHSCROLL_OUTLINE_VCENTER_v1";
+    const v = "SHARED_20260216_BEATSHEET_CARDPLUS_AUTOSCROLL_v3";
 
     const man = document.getElementById("appManifest");
     if(man) man.href = base + "/manifest.webmanifest?v=" + encodeURIComponent(v);
