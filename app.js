@@ -1,6 +1,7 @@
-/* Beat Sheet Pro - app.js (FULL REPLACE v_IDB_AUDIO_SIMPLE_PAGER_WRAP_FIX_SCROLL_CENTER_v2) */
+/* Beat Sheet Pro - app.js (FULL REPLACE v_IDB_AUDIO_PAGER_CARDS_CARDPLUS_AUTOSCROLL_v3) */
 (() => {
 "use strict";
+
 function syncHeaderHeightVar(){
   const header = document.querySelector("header");
   if(!header) return;
@@ -39,6 +40,9 @@ const els = {
   drum3Btn: need("drum3Btn"),
   drum4Btn: need("drum4Btn"),
 
+  // autoscroll
+  autoScrollBtn: need("autoScrollBtn"),
+
   // projects
   projectPicker: need("projectPicker"),
   editProjectBtn: need("editProjectBtn"),
@@ -75,6 +79,7 @@ const STORAGE_KEY = `${KEY_PREFIX}projects_v1`;
 const RHYME_CACHE_KEY = `${KEY_PREFIX}rhyme_cache_v1`;
 const DOCK_HIDDEN_KEY = `${KEY_PREFIX}rhymeDock_hidden_v1`;
 const HEADER_COLLAPSED_KEY = `${KEY_PREFIX}header_collapsed_v1`;
+const AUTOSCROLL_KEY = `${KEY_PREFIX}autoscroll_v1`;
 
 const OLD_STORAGE_KEY = "beatsheetpro_projects_v1";
 const OLD_RHYME_CACHE_KEY = "beatsheetpro_rhyme_cache_v1";
@@ -102,18 +107,16 @@ const OLD_HEADER_COLLAPSED_KEY = "beatsheetpro_header_collapsed_v1";
 ✅ SECTIONS
 ***********************/
 const SECTION_DEFS = [
-  { key:"verse1",  title:"Verse 1",  bars:16, extra:4 },
-  { key:"chorus1", title:"Chorus 1", bars:12, extra:4 },
-  { key:"verse2",  title:"Verse 2",  bars:16, extra:4 },
-  { key:"chorus2", title:"Chorus 2", bars:12, extra:4 },
-  { key:"verse3",  title:"Verse 3",  bars:16, extra:4 },
-  { key:"bridge",  title:"Bridge",   bars: 8, extra:4 },
-  { key:"chorus3", title:"Chorus 3", bars:12, extra:4 },
+  { key:"verse1",  title:"Verse 1"  },
+  { key:"chorus1", title:"Chorus 1" },
+  { key:"verse2",  title:"Verse 2"  },
+  { key:"chorus2", title:"Chorus 2" },
+  { key:"verse3",  title:"Verse 3"  },
+  { key:"bridge",  title:"Bridge"   },
+  { key:"chorus3", title:"Chorus 3" },
 ];
 
 const FULL_ORDER = ["verse1","chorus1","verse2","chorus2","verse3","bridge","chorus3"];
-
-// ✅ pager order
 const PAGE_ORDER = ["full", ...FULL_ORDER];
 
 const FULL_HEADINGS = FULL_ORDER.map(k => (SECTION_DEFS.find(s=>s.key===k)?.title || k).toUpperCase());
@@ -146,6 +149,34 @@ function getProjectBpm(){
   const p = getActiveProject();
   return clampInt(parseInt(els.bpm?.value || p.bpm || 95, 10), 40, 240);
 }
+
+/***********************
+✅ AutoScroll (persisted)
+***********************/
+let autoScrollOn = false;
+
+function loadAutoScroll(){
+  try{ return localStorage.getItem(AUTOSCROLL_KEY) === "1"; }catch{ return false; }
+}
+function saveAutoScroll(v){
+  try{ localStorage.setItem(AUTOSCROLL_KEY, v ? "1" : "0"); }catch{}
+}
+function updateAutoScrollBtn(){
+  if(!els.autoScrollBtn) return;
+  els.autoScrollBtn.classList.toggle("on", !!autoScrollOn);
+  els.autoScrollBtn.textContent = "Scroll";
+  els.autoScrollBtn.title = autoScrollOn ? "Auto Scroll: ON" : "Auto Scroll: OFF";
+}
+function setAutoScroll(v){
+  autoScrollOn = !!v;
+  lastAutoScrollToken = null;
+  // when switching modes, clear previous visual state so the new mode looks correct immediately
+  clearAllPracticeAndActive();
+  saveAutoScroll(autoScrollOn);
+  updateAutoScrollBtn();
+  showToast(autoScrollOn ? "Auto Scroll ON" : "Auto Scroll OFF");
+}
+els.autoScrollBtn?.addEventListener("click", ()=> setAutoScroll(!autoScrollOn));
 
 /***********************
 ✅ IndexedDB AUDIO
@@ -219,7 +250,7 @@ async function ensureRecInIdb(rec){
       await idbPutAudio({ id, blob, name: rec.name, mime: rec.mime || blob.type, createdAt: rec.createdAt });
       rec.blobId = id;
       rec.mime = rec.mime || blob.type || "audio/*";
-      delete rec.dataUrl; // ✅ critical
+      delete rec.dataUrl;
       return true;
     }catch(e){
       console.error(e);
@@ -318,7 +349,7 @@ function setHeaderCollapsed(isCol){
   updateDockForKeyboard();
   if(isCol) stopEyePulse();
   else startEyePulseFromBpm();
-syncHeaderHeightVar();
+  syncHeaderHeightVar();
 
   renderAll();
 }
@@ -630,7 +661,7 @@ function blankSections(){
     sections[s.key] = {
       key: s.key,
       title: s.title,
-      bars: Array.from({length: s.bars + s.extra}, ()=>({ text:"" })),
+      bars: [{ text:"" }],
     };
   }
   return sections;
@@ -666,11 +697,20 @@ let store = loadStore();
 
 function repairProject(p){
   if(!p.sections || typeof p.sections !== "object") p.sections = blankSections();
+
   for(const def of SECTION_DEFS){
-    if(!p.sections[def.key] || !Array.isArray(p.sections[def.key].bars)){
-      p.sections[def.key] = { key:def.key, title:def.title, bars:Array.from({length:def.bars+def.extra}, ()=>({text:""})) };
+    if(!p.sections[def.key] || typeof p.sections[def.key] !== "object"){
+      p.sections[def.key] = { key:def.key, title:def.title, bars:[{text:""}] };
     }
+    if(!Array.isArray(p.sections[def.key].bars)){
+      p.sections[def.key].bars = [{ text:"" }];
+    }
+    if(p.sections[def.key].bars.length === 0){
+      p.sections[def.key].bars = [{ text:"" }];
+    }
+    p.sections[def.key].bars = p.sections[def.key].bars.map(b => ({ text: (b?.text ?? "") }));
   }
+
   if(!p.activeSection) p.activeSection = "full";
   if(!Array.isArray(p.recordings)) p.recordings = [];
   if(!p.bpm) p.bpm = 95;
@@ -785,7 +825,6 @@ function playKick(){
   o.connect(g); g.connect(metroGain);
   o.start(t); o.stop(t + 0.13);
 }
-
 function playSnare(){
   ensureAudio();
   const t = audioCtx.currentTime;
@@ -815,7 +854,6 @@ function playSnare(){
   noise.start(t);
   noise.stop(t + 0.16);
 }
-
 function playHat(atTime = null, amp = 0.18){
   ensureAudio();
   const t = atTime ?? audioCtx.currentTime;
@@ -845,18 +883,180 @@ function playHat(atTime = null, amp = 0.18){
   noise.stop(t + 0.02);
 }
 
-/* highlight ALWAYS ALL */
-function flashBeats(beatInBar){
-  const barEls = document.querySelectorAll(".bar");
-  barEls.forEach(barEl=>{
-    const beats = barEl?.querySelectorAll(".beat");
-    if(!beats || beats.length < 4) return;
-    beats.forEach(b=>b.classList.remove("flash"));
-    beats[beatInBar]?.classList.add("flash");
-    setTimeout(()=>beats.forEach(b=>b.classList.remove("flash")), 90);
-  });
+/***********************
+✅ ACTIVE BAR + HIGHLIGHT ENGINE
+Fix #2: AutoScroll ON cycles bars + scrolls
+Fix #3: AutoScroll OFF ticks ALL cards on active page
+***********************/
+let lastActiveBarKey = null;
+let lastActiveBarIdx = -1;
+
+// only scroll once per bar
+let lastAutoScrollToken = null;
+
+function getActiveRealPageEl(pageKey){
+  return document.querySelector(`.page[data-page-key="${CSS.escape(pageKey)}"]:not([data-clone="1"])`);
 }
 
+function clearOldActiveBar(){
+  if(lastActiveBarKey == null) return;
+  const oldPage = getActiveRealPageEl(lastActiveBarKey);
+  if(oldPage){
+    oldPage.querySelectorAll(".bar.barActive").forEach(el=>el.classList.remove("barActive"));
+    oldPage.querySelectorAll(".beat.flash").forEach(el=>el.classList.remove("flash"));
+  }
+}
+
+function clearFlashesOnPage(pageKey){
+  const page = getActiveRealPageEl(pageKey);
+  if(!page) return;
+  page.querySelectorAll(".beat.flash").forEach(el=>el.classList.remove("flash"));
+}
+
+function setActiveBarDOM(pageKey, barIdx){
+  clearOldActiveBar();
+
+  const page = getActiveRealPageEl(pageKey);
+  if(!page) return null;
+
+  const bar = page.querySelector(`.bar[data-bar-idx="${barIdx}"]`);
+  if(!bar) return null;
+
+  bar.classList.add("barActive");
+  lastActiveBarKey = pageKey;
+  lastActiveBarIdx = barIdx;
+  return bar;
+}
+
+function findVerticalScroller(startEl){
+  let el = startEl;
+  while(el && el !== document.body){
+    const cs = getComputedStyle(el);
+    const oy = cs.overflowY;
+    const canScrollY = (oy === "auto" || oy === "scroll") && (el.scrollHeight > el.clientHeight + 2);
+    if(canScrollY) return el;
+    el = el.parentElement;
+  }
+
+  // fallback: try the active page itself
+  const page = startEl?.closest?.(".page");
+  if(page && page.scrollHeight > page.clientHeight + 2) return page;
+
+  // last resort
+  return document.scrollingElement || document.documentElement;
+}
+
+function scrollBarIntoView(barEl){
+  if(!barEl) return;
+
+  const scroller = findVerticalScroller(barEl);
+  if(!scroller) return;
+
+  const cRect = scroller.getBoundingClientRect();
+  const bRect = barEl.getBoundingClientRect();
+
+  const padTop = 70;
+  const padBot = 140;
+
+  const topOk = bRect.top >= (cRect.top + padTop);
+  const botOk = bRect.bottom <= (cRect.bottom - padBot);
+  if(topOk && botOk) return;
+
+  const curTop = scroller.scrollTop || 0;
+  const targetTop = curTop + (bRect.top - cRect.top) - (cRect.height * 0.22);
+
+  if(typeof scroller.scrollTo === "function"){
+    scroller.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
+  }else{
+    scroller.scrollTop = Math.max(0, targetTop);
+  }
+}
+
+
+function flashBeatOnBar(barEl, beatInBar){
+  if(!barEl) return;
+  const beats = barEl.querySelectorAll(".beat");
+  if(!beats || beats.length < 4) return;
+
+  beats.forEach(b=>b.classList.remove("flash"));
+  const t = beats[beatInBar];
+  if(t) t.classList.add("flash");
+  setTimeout(()=>beats.forEach(b=>b.classList.remove("flash")), 90);
+}
+
+function flashBeatOnAllBars(pageKey, beatInBar){
+  const page = getActiveRealPageEl(pageKey);
+  if(!page) return;
+
+  // no "active bar" in this mode
+  page.querySelectorAll(".bar.barActive").forEach(b=>b.classList.remove("barActive"));
+
+  // flash the same beat box on every bar card
+  const bars = page.querySelectorAll(".bar");
+  bars.forEach(bar=>{
+    const beats = bar.querySelectorAll(".beat");
+    if(beats && beats.length >= 4){
+      beats.forEach(b=>b.classList.remove("flash"));
+      const t = beats[beatInBar];
+      if(t) t.classList.add("flash");
+    }
+  });
+
+  setTimeout(()=>{
+    const page2 = getActiveRealPageEl(pageKey);
+    if(!page2) return;
+    page2.querySelectorAll(".beat.flash").forEach(b=>b.classList.remove("flash"));
+  }, 90);
+}
+
+function syncHighlightAndScroll(pageKey, barIdx, beatInBar){
+  const p = getActiveProject();
+  if(!p || !pageKey) return;
+
+  if(pageKey === "full") return;
+
+  const sec = p.sections?.[pageKey];
+  const count = sec?.bars?.length || 1;
+  const safeBarIdx = count ? (barIdx % count) : 0;
+  const safeBeat = Math.max(0, Math.min(3, beatInBar|0));
+
+  // ✅ FIX #3: AutoScroll OFF = tick-highlight ALL cards on the page
+  if(!autoScrollOn){
+    // avoid cross-page leftovers
+    if(lastActiveBarKey && lastActiveBarKey !== pageKey) clearOldActiveBar();
+    lastActiveBarKey = pageKey;
+    lastActiveBarIdx = -1;
+    lastAutoScrollToken = null;
+
+    flashBeatOnAllBars(pageKey, safeBeat);
+    return;
+  }
+
+  // ✅ AutoScroll ON = active bar cycles + scrolls
+  const barEl = setActiveBarDOM(pageKey, safeBarIdx);
+  if(barEl) flashBeatOnBar(barEl, safeBeat);
+
+  // scroll once per bar on beat 1
+  if(barEl && safeBeat === 0){
+    const token = `${pageKey}:${safeBarIdx}`;
+    if(token !== lastAutoScrollToken){
+      lastAutoScrollToken = token;
+      requestAnimationFrame(()=>scrollBarIntoView(barEl));
+    }
+  }
+}
+
+function clearAllPracticeAndActive(){
+  document.querySelectorAll(".bar.barActive").forEach(b=>b.classList.remove("barActive"));
+  document.querySelectorAll(".beat.flash").forEach(b=>b.classList.remove("flash"));
+  lastActiveBarKey = null;
+  lastActiveBarIdx = -1;
+  lastAutoScrollToken = null;
+}
+
+/***********************
+✅ drums UI
+***********************/
 function drumButtons(){
   return [els.drum1Btn, els.drum2Btn, els.drum3Btn, els.drum4Btn].filter(Boolean);
 }
@@ -869,6 +1069,9 @@ function updateDrumButtonsUI(){
   });
 }
 
+/***********************
+✅ Metronome (drums)
+***********************/
 function startMetronome(){
   ensureAudio();
   if(audioCtx.state === "suspended") audioCtx.resume();
@@ -886,11 +1089,14 @@ function startMetronome(){
     const step16 = metroBeat16 % 16;
     const beatInBar = Math.floor(step16 / 4);
 
+    const beatCount = Math.floor(metroBeat16 / 4);
+    const barIdx = Math.floor(beatCount / 4);
+
+    // play drums
     if(activeDrum === 1){
       playHat(null, (step16 % 4 === 2) ? 0.14 : 0.18);
       if(step16 === 0 || step16 === 7 || step16 === 10) playKick();
       if(step16 === 4 || step16 === 12) playSnare();
-
     }else if(activeDrum === 2){
       const t = audioCtx.currentTime;
       playHat(t, 0.17);
@@ -899,28 +1105,26 @@ function startMetronome(){
       }
       if(step16 === 0 || step16 === 6 || step16 === 9 || step16 === 14) playKick();
       if(step16 === 4 || step16 === 12) playSnare();
-
     }else if(activeDrum === 3){
       const t = audioCtx.currentTime;
       playHat(t, (step16 % 2 === 0) ? 0.18 : 0.14);
-
       if(step16 === 14){
         playHat(t + (intervalMs/1000)*0.33, 0.12);
         playHat(t + (intervalMs/1000)*0.66, 0.12);
       }
       if(step16 === 0 || step16 === 5 || step16 === 8 || step16 === 13) playKick();
       if(step16 === 4 || step16 === 12) playSnare();
-
     }else{
       const t = audioCtx.currentTime;
       if(step16 % 2 === 0) playHat(t, 0.18);
       if(step16 === 7 || step16 === 15) playHat(t, 0.12);
-
       if(step16 === 0 || step16 === 7 || step16 === 11) playKick();
       if(step16 === 4 || step16 === 12) playSnare();
     }
 
-    if(step16 % 4 === 0) flashBeats(beatInBar);
+    const p = getActiveProject();
+    const pageKey = p?.activeSection || "full";
+    syncHighlightAndScroll(pageKey, barIdx, beatInBar);
 
     metroBeat16++;
     metroTimer = setTimeout(tick, intervalMs);
@@ -933,6 +1137,7 @@ function stopMetronome(){
   metroOn = false;
   updateDrumButtonsUI();
   if(!(recording || playback.isPlaying)) stopEyePulse();
+  if(!playback.isPlaying && !recording) clearAllPracticeAndActive();
 }
 function handleDrumPress(which){
   if(!metroOn){
@@ -954,11 +1159,8 @@ function handleDrumPress(which){
 /***********************
 ✅ PLAYBACK
 ***********************/
-const decodedCache = new Map(); // key: blobId/id -> AudioBuffer
-
-async function blobToArrayBuffer(blob){
-  return await blob.arrayBuffer();
-}
+const decodedCache = new Map();
+async function blobToArrayBuffer(blob){ return await blob.arrayBuffer(); }
 async function decodeBlobToBuffer(blob){
   ensureAudio();
   const ab = await blobToArrayBuffer(blob);
@@ -976,12 +1178,10 @@ const playback = {
   _startTime: 0,
   _offset: 0,
   raf: null,
-  lastBeat: -1,
 
   stop(fromEnded){
     if(this.raf) cancelAnimationFrame(this.raf);
     this.raf = null;
-    this.lastBeat = -1;
 
     if(this._src){
       try{ this._src.onended = null; }catch{}
@@ -999,6 +1199,8 @@ const playback = {
     renderRecordings();
     if(!(metroOn || recording)) stopEyePulse();
     if(fromEnded) showToast("Done");
+
+    if(!metroOn && !recording) clearAllPracticeAndActive();
   },
 
   _startSyncLoop(){
@@ -1007,13 +1209,14 @@ const playback = {
 
       const bpm = getProjectBpm();
       const t = Math.max(0, (audioCtx.currentTime - this._startTime) + this._offset);
+
       const beatPos = (t * bpm) / 60;
       const beatInBar = Math.floor(beatPos) % 4;
+      const barIdx = Math.floor(beatPos / 4);
 
-      if(beatInBar !== this.lastBeat){
-        this.lastBeat = beatInBar;
-        flashBeats(beatInBar);
-      }
+      const p = getActiveProject();
+      const pageKey = p?.activeSection || "full";
+      syncHighlightAndScroll(pageKey, barIdx, beatInBar);
 
       this.raf = requestAnimationFrame(loop);
     };
@@ -1027,7 +1230,6 @@ const playback = {
     this.stop(false);
 
     this.recId = rec.id;
-    this.lastBeat = -1;
 
     const blob = await getRecBlob(rec);
     if(!blob){
@@ -1262,9 +1464,7 @@ function buildFullTextFromProject(p){
 function applyFullTextToProject(p, fullText){
   const lines = String(fullText||"").replace(/\r/g,"").split("\n");
   let currentKey = null;
-  let writeIndex = 0;
 
-  // clear all sections first
   for(const key of FULL_ORDER){
     const sec = p.sections[key];
     if(sec?.bars) sec.bars.forEach(b => b.text = "");
@@ -1276,9 +1476,12 @@ function applyFullTextToProject(p, fullText){
     return def ? def.key : null;
   }
 
+  const writeIndex = {};
+  for(const k of FULL_ORDER) writeIndex[k] = 0;
+
   for(const raw of lines){
     const key = headingToKey(raw);
-    if(key){ currentKey = key; writeIndex = 0; continue; }
+    if(key){ currentKey = key; continue; }
     if(!currentKey) continue;
 
     const txt = String(raw||"").replace(/\s+$/,"");
@@ -1286,10 +1489,20 @@ function applyFullTextToProject(p, fullText){
 
     const sec = p.sections[currentKey];
     if(!sec?.bars) continue;
-    if(writeIndex >= sec.bars.length) continue;
 
-    sec.bars[writeIndex].text = txt;
-    writeIndex++;
+    const i = writeIndex[currentKey] || 0;
+    if(i >= sec.bars.length){
+      sec.bars.push({ text:"" });
+    }
+    sec.bars[i].text = txt;
+    writeIndex[currentKey] = i + 1;
+  }
+
+  for(const key of FULL_ORDER){
+    const sec = p.sections[key];
+    if(sec && Array.isArray(sec.bars) && sec.bars.length === 0){
+      sec.bars = [{ text:"" }];
+    }
   }
 
   touchProject(p);
@@ -1347,19 +1560,12 @@ function updateRhymesFromFullCaret(fullTa){
 }
 
 /***********************
-✅ CAROUSEL PAGER (REAL FIX)
-- uses native scroll-snap
-- adds clones so FULL <-> CHORUS 3 wraps reliably on all phones
+✅ CAROUSEL PAGER (wrap)
 ***********************/
-
-// stored keys (real pages only)
-
-
-// carousel keys (adds clones at ends)
 const CAROUSEL_ORDER = [
-  PAGE_ORDER[PAGE_ORDER.length - 1], // clone of last (chorus3)
-  ...PAGE_ORDER,                     // real pages
-  PAGE_ORDER[0]                      // clone of first (full)
+  PAGE_ORDER[PAGE_ORDER.length - 1],
+  ...PAGE_ORDER,
+  PAGE_ORDER[0]
 ];
 
 function buildPager(p){
@@ -1372,7 +1578,6 @@ function buildPager(p){
     page.className = "page";
     page.dataset.pageKey = key;
 
-    // mark clones (first and last)
     if(i === 0 || i === CAROUSEL_ORDER.length - 1){
       page.dataset.clone = "1";
     }
@@ -1393,6 +1598,8 @@ function buildPager(p){
     }
 
     const title = (SECTION_DEFS.find(s=>s.key===key)?.title || key).toUpperCase();
+
+    // ✅ Fix #1: NO top "Bar +" button. Add happens via + on each card.
     page.innerHTML = `<div class="pageTitle">${escapeHtml(title)}</div>`;
 
     const mount = document.createElement("div");
@@ -1412,53 +1619,48 @@ function measurePager(pagerEl){
   const w = Math.round(pagerEl.clientWidth || pagerEl.getBoundingClientRect().width || window.innerWidth);
   return Math.max(1, w);
 }
-
 function getCurrentIdx(pagerEl){
   const w = measurePager(pagerEl);
   const idx = Math.round(pagerEl.scrollLeft / w);
   return Math.max(0, Math.min(CAROUSEL_ORDER.length - 1, idx));
 }
-
 function snapToIdx(pagerEl, idx, behavior="auto"){
   const w = measurePager(pagerEl);
   idx = Math.max(0, Math.min(CAROUSEL_ORDER.length - 1, idx));
   pagerEl.scrollTo({ left: idx * w, behavior });
 }
-
 function setActiveSectionFromIdx(p, idx){
-  // translate carousel idx -> real key
   let key = CAROUSEL_ORDER[idx] || "full";
-
-  // if we're sitting on a clone, map to the real page
-  if(idx === 0) key = PAGE_ORDER[PAGE_ORDER.length - 1];      // last real
-  if(idx === CAROUSEL_ORDER.length - 1) key = PAGE_ORDER[0];  // first real
+  if(idx === 0) key = PAGE_ORDER[PAGE_ORDER.length - 1];
+  if(idx === CAROUSEL_ORDER.length - 1) key = PAGE_ORDER[0];
 
   if(p.activeSection !== key){
     p.activeSection = key;
     touchProject(p);
+
+    // important for autoscroll scroll-per-bar
+    lastAutoScrollToken = null;
+
+    // when changing pages in non-autoscroll practice, clear old flashes
+    clearAllPracticeAndActive();
   }
 }
-
 function shouldIgnoreSwipeStart(target){
   if(!target) return false;
-  // DO allow starting on textareas, but ignore controls
   return !!target.closest("input, select, button, .rhymeDock, .iconBtn, .projIconBtn");
 }
 
 function setupCarouselPager(pagerEl, p){
-  // We will detect horizontal swipes ourselves (more reliable than scrollLeft-at-edges)
   pagerEl.style.touchAction = "pan-y pinch-zoom";
   pagerEl.style.overscrollBehaviorX = "contain";
   pagerEl.style.webkitOverflowScrolling = "touch";
   pagerEl.style.scrollBehavior = "auto";
 
-  // snap to saved REAL page on resize (realIdx+1 because clone is at 0)
   window.addEventListener("resize", ()=>{
     const realIdx = Math.max(0, PAGE_ORDER.indexOf(p.activeSection || "full"));
     snapToIdx(pagerEl, realIdx + 1, "auto");
   });
 
-  // If user lands on a clone, jump to the matching real page
   let tmr = null;
   pagerEl.addEventListener("scroll", ()=>{
     if(tmr) clearTimeout(tmr);
@@ -1482,28 +1684,26 @@ function setupCarouselPager(pagerEl, p){
     }, 120);
   }, { passive:true });
 
-  // --- SWIPE DETECTOR (forces wrap even when native scroll won’t move at edges) ---
   let tracking = false;
   let locked = false;
   let startX = 0, startY = 0, lastX = 0;
   let startIdx = 0;
 
-  const LOCK_X = 18;   // px to lock horizontal
-  const COMMIT = 50;   // px to commit page change
+  const LOCK_X = 18;
+  const COMMIT = 50;
 
   function finish(){
     if(!tracking) return;
     tracking = false;
 
-    const dx = lastX - startX; // + right, - left
+    const dx = lastX - startX;
     let idx = startIdx;
 
     if(locked){
-      if(dx <= -COMMIT) idx = startIdx + 1; // swipe left -> next
-      else if(dx >= COMMIT) idx = startIdx - 1; // swipe right -> prev
+      if(dx <= -COMMIT) idx = startIdx + 1;
+      else if(dx >= COMMIT) idx = startIdx - 1;
     }
 
-    // wrap inside carousel range
     idx = Math.max(0, Math.min(CAROUSEL_ORDER.length - 1, idx));
     snapToIdx(pagerEl, idx, "smooth");
     setActiveSectionFromIdx(p, idx);
@@ -1542,8 +1742,6 @@ function setupCarouselPager(pagerEl, p){
         return;
       }
     }
-
-    // critical: stop browser “edge scroll does nothing” behavior
     e.preventDefault();
   }, { passive:false });
 
@@ -1551,9 +1749,9 @@ function setupCarouselPager(pagerEl, p){
   pagerEl.addEventListener("touchcancel", finish, { passive:true });
 }
 
-
 /***********************
 ✅ bar rendering helper
+Fix #1: "+" exists on EVERY card and is just "+"
 ***********************/
 function renderSectionBarsInto(p, sectionKey, mountEl){
   const sec = p.sections[sectionKey];
@@ -1562,6 +1760,8 @@ function renderSectionBarsInto(p, sectionKey, mountEl){
   sec.bars.forEach((bar, idx)=>{
     const wrap = document.createElement("div");
     wrap.className = "bar";
+    wrap.dataset.barIdx = String(idx);
+    wrap.setAttribute("data-bar-idx", String(idx));
 
     const n = countSyllablesLine(bar.text||"");
     const glow = syllGlowClass(n);
@@ -1575,6 +1775,24 @@ function renderSectionBarsInto(p, sectionKey, mountEl){
             <span class="lbl">Syllables</span>
             <span class="val" data-syll="${sectionKey}:${idx}">${n ? n : ""}</span>
           </div>
+        </div>
+
+        <div class="barRightBtns">
+          <button type="button"
+            class="barPlusBtn"
+            title="Add card below"
+            aria-label="Add card below"
+            data-action="addBarAfter"
+            data-sec="${escapeHtml(sectionKey)}"
+            data-idx="${idx}">+</button>
+
+          <button type="button"
+            class="barDelBtn"
+            title="Delete card"
+            aria-label="Delete card"
+            data-action="delBar"
+            data-sec="${escapeHtml(sectionKey)}"
+            data-idx="${idx}">×</button>
         </div>
       </div>
 
@@ -1651,6 +1869,62 @@ function renderSectionBarsInto(p, sectionKey, mountEl){
 }
 
 /***********************
+✅ add/delete bar actions (delegation)
+Fix #1: ONLY card-based plus remains
+***********************/
+document.addEventListener("click", (e)=>{
+  const btn = e.target.closest("[data-action]");
+  if(!btn) return;
+
+  const action = btn.getAttribute("data-action");
+  const p = getActiveProject();
+
+  if(action === "addBarAfter"){
+    const secKey = btn.getAttribute("data-sec");
+    const idxStr = btn.getAttribute("data-idx");
+    const idx = parseInt(idxStr, 10);
+    if(!secKey || !p.sections?.[secKey]) return;
+    const bars = p.sections[secKey].bars;
+    if(!Array.isArray(bars)) return;
+    if(Number.isNaN(idx) || idx < 0 || idx >= bars.length) return;
+
+    bars.splice(idx + 1, 0, { text:"" });
+    touchProject(p);
+    renderBars();
+
+    requestAnimationFrame(()=>{
+      const page = getActiveRealPageEl(secKey);
+      const newIdx = idx + 1;
+      page?.querySelector(`textarea[data-sec="${CSS.escape(secKey)}"][data-idx="${newIdx}"]`)?.focus?.();
+    });
+
+    showToast("Added");
+    return;
+  }
+
+  if(action === "delBar"){
+    const secKey = btn.getAttribute("data-sec");
+    const idxStr = btn.getAttribute("data-idx");
+    const idx = parseInt(idxStr, 10);
+    if(!secKey || !p.sections?.[secKey]) return;
+    const bars = p.sections[secKey].bars;
+    if(!Array.isArray(bars)) return;
+
+    if(bars.length <= 1){
+      showToast("Can’t delete last card");
+      return;
+    }
+    if(Number.isNaN(idx) || idx < 0 || idx >= bars.length) return;
+
+    bars.splice(idx, 1);
+    touchProject(p);
+    renderBars();
+    showToast("Deleted");
+    return;
+  }
+});
+
+/***********************
 ✅ renderBars
 ***********************/
 function renderBars(){
@@ -1661,19 +1935,20 @@ function renderBars(){
   const pager = buildPager(p);
   els.bars.appendChild(pager);
 
+  lastAutoScrollToken = null;
+
   // FULL editor
   const fullTa = els.bars.querySelector(".fullEditor");
   if(fullTa){
     fullTa.value = buildFullTextFromProject(p);
 
     let tmr = null;
-      const commit = () => {
+    const commit = () => {
       applyFullTextToProject(p, fullTa.value || "");
-      syncSectionCardsFromProject(p); // ✅ update cards instantly
+      syncSectionCardsFromProject(p);
     };
 
     const refresh = () => { updateRhymesFromFullCaret(fullTa); updateDockForKeyboard(); };
-
     refresh();
 
     fullTa.addEventListener("input", ()=>{
@@ -1686,10 +1961,8 @@ function renderBars(){
     fullTa.addEventListener("focus", refresh);
   }
 
-  // snap to saved REAL page (offset by 1 because clone is at index 0)
   const realIdx = Math.max(0, PAGE_ORDER.indexOf(p.activeSection || "full"));
   snapToIdx(pager, realIdx + 1, "auto");
-
   setupCarouselPager(pager, p);
 }
 
@@ -1868,6 +2141,7 @@ function renderAll(){
   updateDockForKeyboard();
   updateRecordButtonUI();
   updateDrumButtonsUI();
+  updateAutoScrollBtn();
 
   if(!(metroOn || recording || playback.isPlaying)) stopEyePulse();
   else startEyePulseFromBpm();
@@ -1886,7 +2160,7 @@ function makeHtmlDoc(title, bodyText){
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>${escapeHtml(title)}</title>
 <style>
   body{ font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:16px; }
@@ -2019,7 +2293,6 @@ els.projectPicker?.addEventListener("change", ()=>{
   }
 });
 
-// rename via Edit button (prompt)
 els.editProjectBtn?.addEventListener("click", ()=>{
   const p = getActiveProject();
   const cur = (p.name || "").trim();
@@ -2070,7 +2343,6 @@ els.mp3Btn?.addEventListener("click", ()=>{
   try{ els.mp3Input?.click?.(); }
   catch(e){ console.error(e); showToast("Upload failed"); }
 });
-
 els.mp3Input?.addEventListener("change", async (e)=>{
   try{
     const file = e.target.files?.[0];
@@ -2089,7 +2361,10 @@ els.mp3Input?.addEventListener("change", async (e)=>{
 (async function boot(){
   setDockHidden(loadDockHidden());
   document.body.classList.toggle("headerCollapsed", loadHeaderCollapsed());
-syncHeaderHeightVar();
+  autoScrollOn = loadAutoScroll();
+  updateAutoScrollBtn();
+
+  syncHeaderHeightVar();
 
   await migrateAllAudioOnce();
 
